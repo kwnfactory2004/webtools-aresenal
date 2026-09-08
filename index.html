@@ -3,307 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KWN FACTORY | Web Tools</title>
-    <!-- Google Fonts: Inter & Noto Sans JP for clean, highly readable typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS -->
+    <title>Web Tools Arsenal</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- GSAP for smooth animations -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-    
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
-                    },
-                    colors: {
-                        // Deep Green Accent (Classic mechanic/racing green)
-                        primary: '#0F4C3A', 
-                        primaryLight: '#187358',
-                        // High readability background & text colors
-                        bgBase: '#F8FAFC',
-                        textMain: '#1E293B',
-                        textSub: '#475569',
-                        // Glassmorphism surface
-                        surface: 'rgba(255, 255, 255, 0.75)',
-                        surfaceHover: 'rgba(255, 255, 255, 0.95)',
-                    },
-                    boxShadow: {
-                        'glass': '0 8px 32px rgba(15, 76, 58, 0.06)',
-                        'glow': '0 12px 40px rgba(15, 76, 58, 0.12)',
-                    }
-                }
-            }
-        }
-    </script>
-
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        :root {
+            --accent: #0F4C3A; /* ディープグリーン */
+        }
         body {
-            background-color: theme('colors.bgBase');
-            color: theme('colors.textMain');
-            margin: 0;
-            overflow-x: hidden;
+            /* Apple製品のシステムフォントを優先 */
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #F5F5F7; /* iOS/macOSらしい薄いグレー背景 */
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
-
-        /* Mechanic Blueprint / Grainy Background */
-        .mechanic-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            /* Suble industrial grid */
-            background-image: 
-                linear-gradient(rgba(15, 76, 58, 0.04) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(15, 76, 58, 0.04) 1px, transparent 1px);
-            background-size: 32px 32px;
-        }
-
-        .mechanic-bg::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.4; 
-            z-index: -1;
-            pointer-events: none;
-            /* Grainy noise for metallic/industrial texture */
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
-            /* Soft radial gradient to focus center */
-            mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
-            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
-        }
-
-        /* Light Mode Glassmorphism Card */
-        .glass-card {
-            background: var(--surface, rgba(255, 255, 255, 0.75));
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(15, 76, 58, 0.1);
-            box-shadow: theme('boxShadow.glass');
-            border-radius: 1.5rem; 
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            overflow: hidden;
+        
+        /* Apple風の滑らかで美しいカードスタイル */
+        .apple-card {
+            background: #FFFFFF;
+            border-radius: 28px; /* 大きめの角丸 */
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
             position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+        
+        /* ホバー時の浮遊感 */
+        .apple-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+        }
+        
+        /* タップ・クリック時の心地よい沈み込み */
+        .apple-card:active {
+            transform: scale(0.97);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            transition: all 0.1s;
         }
 
-        .glass-card:hover {
-            background: var(--surfaceHover, rgba(255, 255, 255, 0.95));
-            transform: translateY(-4px) scale(1.005);
-            box-shadow: theme('boxShadow.glow');
-            border-color: rgba(15, 76, 58, 0.25);
-        }
-
-        /* Micro-interactions for buttons */
-        .btn-interactive {
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        .btn-interactive:active {
-            transform: scale(0.96);
-        }
-
-        .fade-up-element {
-            opacity: 0;
-            visibility: hidden;
-        }
-
-        /* Subtle metallic shine sweep on hover */
-        .shine-effect::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%);
-            transform: skewX(-20deg);
-            transition: all 0.7s ease;
-            pointer-events: none;
-        }
-        .glass-card:hover .shine-effect::after {
-            left: 200%;
-        }
+        .text-accent { color: var(--accent); }
+        .bg-accent { background-color: var(--accent); }
     </style>
 </head>
-<body class="antialiased selection:bg-primary selection:text-white">
+<body class="text-gray-900 min-h-screen py-12 px-4 sm:px-6 lg:px-8 flex flex-col items-center selection:bg-[#0F4C3A] selection:text-white">
 
-    <div class="mechanic-bg"></div>
+    <!-- ヘッダーセクション -->
+    <header class="text-center max-w-3xl mx-auto mb-16 mt-8">
+        <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 text-gray-900">
+            Web Tools Arsenal
+        </h1>
+        <p class="text-lg md:text-xl text-gray-500 font-medium leading-relaxed">
+            KWN FACTORYが作り上げた、<br class="hidden sm:block">クラスの生産性を加速させるWebツール。<br>あなたの課題解決をアシストします。
+        </p>
+    </header>
 
-    <!-- Soft ambient background glows in Deep Green -->
-    <div class="fixed top-[-10%] left-[-10%] w-96 h-96 bg-primary rounded-full mix-blend-multiply filter blur-[120px] opacity-[0.03]"></div>
-    <div class="fixed bottom-[-10%] right-[-10%] w-[30rem] h-[30rem] bg-emerald-600 rounded-full mix-blend-multiply filter blur-[150px] opacity-[0.03]"></div>
-
-    <main class="relative z-10 container mx-auto px-6 py-16 md:py-24 max-w-6xl flex flex-col min-h-screen">
+    <!-- Bento Grid レイアウト -->
+    <main class="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        <header class="text-center mb-16 md:mb-24 fade-up-element">
-            <div class="inline-flex items-center justify-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-primary/5 border border-primary/10 text-primary text-sm font-semibold tracking-wider uppercase">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                KWN FACTORY
+        <!-- 1. TimeGrid (大カード) -->
+        <a href="https://kwnfactory2004.github.io/schoolcalendar/" target="_blank" rel="noopener noreferrer" 
+           class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
+            <div>
+                <div class="h-14 w-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
+                    <i data-lucide="calendar" class="w-7 h-7 text-accent"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-3 tracking-tight">TimeGrid</h2>
+                <p class="text-gray-500 font-medium text-lg">機能はひとつ。授業予定の確認だけ。</p>
             </div>
-            <h1 class="text-4xl md:text-6xl font-bold tracking-tight mb-6 text-textMain">
-                Web Tools Arsenal
-            </h1>
-            <p class="text-lg md:text-xl text-textSub font-medium max-w-2xl mx-auto leading-relaxed">
-                KWN FACTORYが作り上げた、クラスの生産性を加速させるWebツール<br class="hidden md:block">あなたの課題解決をアシストします。
-            </p>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 auto-rows-[240px]">
-
-            <!-- Item 1: TimeGrid -->
-            <a href="https://kwnfactory2004.github.io/schoolcalendar/" target="_blank" rel="noopener noreferrer" class="glass-card group md:col-span-2 lg:col-span-3 md:row-span-2 flex flex-col justify-between p-8 fade-up-element text-decoration-none cursor-pointer shine-effect">
-                <div class="flex justify-between items-start z-10 relative">
-                    <div class="p-3 bg-white/80 rounded-xl shadow-sm text-primary group-hover:scale-110 transition-transform duration-300">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                    </div>
-                </div>
-                <!-- Abstract mechanic visual placeholder -->
-                <div class="absolute right-0 bottom-0 w-64 h-64 bg-gradient-to-tl from-primary/5 to-transparent rounded-tl-[100px] z-0"></div>
-                
-                <div class="relative z-10 mt-auto">
-                    <h2 class="text-3xl font-bold mb-3 text-textMain group-hover:text-primary transition-colors duration-300">TimeGrid</h2>
-                    <p class="text-textSub text-sm md:text-base leading-relaxed line-clamp-3">
-                        機能はひとつ。授業予定の確認だけ。
-                    </p>
-                </div>
-            </a>
-
-            <!-- Item 2: 筆記試験対策 -->
-            <a href="https://kwnfactory2004.github.io/mech-hub/" target="_blank" rel="noopener noreferrer" class="glass-card group md:col-span-2 lg:col-span-3 flex flex-col p-6 fade-up-element shine-effect text-decoration-none">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="p-3 bg-slate-100 rounded-xl border border-slate-200 group-hover:bg-primary group-hover:text-white text-primary transition-colors duration-300">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                    </div>
-                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Test Prep Engine</span>
-                </div>
-                <h3 class="text-xl font-bold mb-2 text-textMain">筆記試験対策</h3>
-                <p class="text-sm text-textSub line-clamp-2 mt-auto">筆記試験に向けた対策ハブ。過去20年の過去問を元にあなたの勉強をアシスト。</p>
-            </a>
-
-            <!-- Item 3: Pomodoro Timer -->
-            <a href="https://kwnfactory2004.github.io/pomodoro/" target="_blank" rel="noopener noreferrer" class="glass-card group md:col-span-2 lg:col-span-3 flex flex-row items-center p-6 gap-6 fade-up-element shine-effect text-decoration-none">
-                <div class="flex-shrink-0 w-20 h-20 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center group-hover:border-primary group-hover:shadow-md transition-all duration-300">
-                    <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                </div>
-                <div>
-                    <div class="text-xs text-primary font-bold mb-1 tracking-wider uppercase">Focus Control</div>
-                    <h3 class="text-xl font-bold mb-1 text-textMain">Pomodoro Timer</h3>
-                    <p class="text-sm text-textSub line-clamp-2">余裕を生み出す、25分の魔法。</p>
-                </div>
-            </a>
-
-            <!-- Item 4: ファクトリー稼働実績 -->
-            <div class="glass-card group md:col-span-4 lg:col-span-2 flex flex-col justify-center items-center text-center p-6 fade-up-element relative overflow-hidden">
-                <div class="absolute -right-8 -bottom-8 w-24 h-24 rounded-full border-4 border-primary/10 border-dashed group-hover:rotate-180 transition-transform duration-1000"></div>
-                <p class="text-sm text-textSub mb-1 font-semibold">ファクトリー稼働実績</p>
-                <div class="text-5xl font-extrabold text-primary tracking-tighter my-2">
-                    230<span class="text-2xl">+</span>
-                </div>
-                <p class="text-xs text-textSub font-medium">クラスを越えてアクティブ稼働中</p>
-            </div>
-
-            <!-- Item 5: フィードバック・バグ報告 -->
-            <div class="glass-card md:col-span-4 lg:col-span-4 flex flex-col md:flex-row items-center justify-between p-8 fade-up-element relative overflow-hidden bg-gradient-to-r from-primary/5 to-transparent">
-                
-                <div class="relative z-10 mb-6 md:mb-0 md:mr-8 text-center md:text-left">
-                    <h2 class="text-2xl font-bold mb-2 text-textMain">フィードバック・バグ報告</h2>
-                    <p class="text-textSub text-sm md:text-base max-w-2xl">
-                        「こんな機能を追加してほしい」「動作不良（バグ）を発見した」など、品質向上のための報告をお待ちしています。Instagramから直接連絡してください。
-                    </p>
-                </div>
-                
-                <div class="relative z-10 flex gap-4 w-full md:w-auto shrink-0">
-                    <a href="https://www.instagram.com/kwnfactory.2004?stkn=bHYwa2NkMzk3eXpk&utm_source=qr" target="_blank" rel="noopener noreferrer" class="btn-interactive w-full md:w-auto px-8 py-4 bg-primary text-white font-bold rounded-xl hover:bg-primaryLight flex items-center justify-center gap-3 shadow-lg shadow-primary/20 text-decoration-none">
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                        Instagram
-                    </a>
+            <div class="mt-10 flex justify-end">
+                <div class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-gray-400">
+                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
                 </div>
             </div>
+        </a>
 
+        <!-- 2. 筆記試験対策 (大カード) -->
+        <a href="https://kwnfactory2004.github.io/mech-hub/" target="_blank" rel="noopener noreferrer" 
+           class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
+            <div>
+                <div class="h-14 w-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
+                    <i data-lucide="book-open" class="w-7 h-7 text-accent"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-3 tracking-tight">筆記試験対策</h2>
+                <p class="text-gray-500 font-medium text-lg leading-relaxed">
+                    筆記試験に向けた対策ハブ。<br>過去20年の過去問を元にあなたの勉強をアシスト。
+                </p>
+            </div>
+            <div class="mt-10 flex justify-end">
+                <div class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-gray-400">
+                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </a>
+
+        <!-- 3. Pomodoro Timer (小カード) -->
+        <a href="https://kwnfactory2004.github.io/pomodoro/" target="_blank" rel="noopener noreferrer" 
+           class="apple-card p-8 md:col-span-1 lg:col-span-1 flex flex-col justify-between group block outline-none">
+            <div>
+                <div class="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center mb-5 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
+                    <i data-lucide="timer" class="w-6 h-6 text-accent"></i>
+                </div>
+                <h2 class="text-xl font-bold mb-2 tracking-tight">Pomodoro Timer</h2>
+                <p class="text-gray-500 font-medium text-sm leading-relaxed">余裕を生み出す、<br>25分の魔法。</p>
+            </div>
+            <div class="mt-8 flex justify-end">
+                <div class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-accent group-hover:text-white transition-colors duration-300 text-gray-400">
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </div>
+            </div>
+        </a>
+
+        <!-- 4. ファクトリー稼働実績 (中カード) -->
+        <div class="apple-card p-8 md:col-span-1 lg:col-span-2 flex flex-col justify-between">
+             <div>
+                <div class="h-12 w-12 rounded-xl bg-gray-50 flex items-center justify-center mb-5">
+                    <i data-lucide="activity" class="w-6 h-6 text-accent"></i>
+                </div>
+                <h2 class="text-xl font-bold mb-2 tracking-tight">ファクトリー稼働実績</h2>
+                <div class="mt-6 flex items-center gap-4">
+                     <div class="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                          <div class="bg-accent h-full w-[85%] rounded-full relative">
+                              <!-- グローエフェクト -->
+                              <div class="absolute top-0 right-0 bottom-0 w-8 bg-white opacity-20 rounded-full blur"></div>
+                          </div>
+                     </div>
+                     <span class="text-sm font-bold text-gray-800">85%</span>
+                </div>
+                <p class="text-gray-400 font-medium text-xs mt-3 uppercase tracking-wider">System Status: Online</p>
+            </div>
         </div>
 
-        <footer class="mt-auto pt-24 pb-8 text-center text-textSub text-sm fade-up-element font-medium">
-            <p>&copy; <span id="currentYear"></span> KWN FACTORY. Engineered for Classmates.</p>
-        </footer>
+        <!-- 5. Instagram (小カード) -->
+        <a href="https://www.instagram.com/kwnfactory.2004?stkn=bHYwa2NkMzk3eXpk&utm_source=qr" target="_blank" rel="noopener noreferrer" 
+           class="apple-card p-8 md:col-span-2 lg:col-span-1 flex flex-col items-center justify-center group block outline-none hover:bg-gray-50 transition-colors">
+            <div class="h-16 w-16 rounded-[20px] bg-white shadow-sm border border-gray-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="Instagram" class="w-10 h-10 opacity-90 group-hover:opacity-100 transition-opacity">
+            </div>
+            <span class="font-semibold text-gray-700 tracking-tight">Instagram</span>
+        </a>
 
     </main>
 
+    <footer class="mt-24 text-center text-gray-400 text-sm font-medium">
+        <p>&copy; 2026 KWN FACTORY. All rights reserved.</p>
+    </footer>
+
     <script>
-        document.getElementById('currentYear').textContent = new Date().getFullYear();
-
-        // GSAP Animations
-        gsap.registerPlugin(ScrollTrigger);
-
-        document.addEventListener("DOMContentLoaded", () => {
-            
-            const fadeElements = document.querySelectorAll('.fade-up-element');
-            
-            // Clean fade-in up animation
-            gsap.fromTo(fadeElements, 
-                { 
-                    y: 30, 
-                    opacity: 0,
-                    autoAlpha: 0 
-                },
-                {
-                    y: 0,
-                    opacity: 1,
-                    autoAlpha: 1,
-                    duration: 0.8,
-                    stagger: 0.08, 
-                    ease: "power3.out",
-                    scrollTrigger: {
-                        trigger: "body", 
-                        start: "top top",
-                    }
-                }
-            );
-
-            // Subtle 3D tilt effect on cards for premium feel
-            const cards = document.querySelectorAll('.glass-card');
-            
-            cards.forEach(card => {
-                card.addEventListener('mousemove', (e) => {
-                    const rect = card.getBoundingClientRect();
-                    const x = e.clientX - rect.left; 
-                    const y = e.clientY - rect.top;  
-                    const centerX = rect.width / 2;
-                    const centerY = rect.height / 2;
-                    
-                    // Reduced tilt for a more solid, mechanical feel compared to soft UI
-                    const rotateX = ((y - centerY) / centerY) * -1.5; 
-                    const rotateY = ((x - centerX) / centerX) * 1.5;
-
-                    gsap.to(card, {
-                        rotateX: rotateX,
-                        rotateY: rotateY,
-                        duration: 0.4,
-                        ease: "power2.out",
-                        transformPerspective: 1200,
-                        transformOrigin: "center"
-                    });
-                });
-
-                card.addEventListener('mouseleave', () => {
-                    gsap.to(card, {
-                        rotateX: 0,
-                        rotateY: 0,
-                        duration: 0.5,
-                        ease: "power2.out"
-                    });
-                });
-            });
-        });
+        // Lucideアイコンの初期化
+        lucide.createIcons();
     </script>
 </body>
 </html>
