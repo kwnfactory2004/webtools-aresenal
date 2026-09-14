@@ -4,35 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KWN FACTORY. | Web Tools Arsenal</title>
-    <!-- ブックマーク・ホーム画面用アイコン -->
-    <link rel="icon" href="logo.png" type="image/png">
+    
+    <!-- ブックマーク・アプリアイコンの設定 -->
+    <link rel="icon" type="image/png" href="logo.png">
     <link rel="apple-touch-icon" href="logo.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        :root { --accent: #0F4C3A; }
-        body { 
-            background-color: #F5F5F7; 
-            color: #1D1D1F; 
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro JP", "Hiragino Kaku Gothic ProN", sans-serif; 
+        :root {
+            --accent: #0F4C3A; /* ディープグリーン */
         }
-        .apple-card { 
-            background-color: #FFFFFF; 
-            border-radius: 24px; 
-            box-shadow: 0 4px 24px rgba(0,0,0,0.04); 
-            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #F5F5F7;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-        .apple-card:hover { 
-            transform: scale(0.98); 
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08); 
+        
+        .apple-card {
+            background: #FFFFFF;
+            border-radius: 28px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.02);
         }
+        
+        .apple-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+        }
+        
+        .apple-card:active {
+            transform: scale(0.97);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            transition: all 0.1s;
+        }
+
         .text-accent { color: var(--accent); }
         .bg-accent { background-color: var(--accent); }
     </style>
 </head>
-<body class="min-h-screen px-4 md:px-8 pb-20">
+<body class="text-gray-900 min-h-screen py-12 px-4 sm:px-6 lg:px-8 flex flex-col items-center selection:bg-[#0F4C3A] selection:text-white">
 
-    <!-- Header -->
     <header class="text-center max-w-3xl mx-auto mb-16 mt-8">
         <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-2 text-gray-900">
             KWN FACTORY.
@@ -47,7 +63,6 @@
 
     <main class="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        <!-- Developed Tools Title -->
         <div class="md:col-span-2 lg:col-span-4 mb-2 flex items-center gap-4">
              <div class="h-px bg-gray-200 flex-1"></div>
              <h3 class="text-xl font-bold text-gray-400 tracking-wider uppercase">Developed Tools</h3>
@@ -55,7 +70,7 @@
         </div>
 
         <!-- 1. TimeGrid -->
-        <a href="https://kwnfactory2004.github.io/schoolcalendar/" target="_blank" rel="noopener noreferrer" 
+        <a href="https://kwnfactory2004.github.io/schoolcalendar/" target="_blank" rel="noopener noreferrer"
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
             <div>
                 <div class="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
@@ -72,7 +87,7 @@
         </a>
 
         <!-- 2. 筆記試験対策 -->
-        <a href="https://kwnfactory2004.github.io/mech-hub/" target="_blank" rel="noopener noreferrer" 
+        <a href="https://kwnfactory2004.github.io/mech-hub/" target="_blank" rel="noopener noreferrer"
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
             <div>
                 <div class="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
@@ -91,7 +106,7 @@
         </a>
 
         <!-- 3. Pomodoro Timer -->
-        <a href="https://kwnfactory2004.github.io/pomodoro/" target="_blank" rel="noopener noreferrer" 
+        <a href="https://kwnfactory2004.github.io/pomodoro/" target="_blank" rel="noopener noreferrer"
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
             <div>
                 <div class="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
@@ -108,16 +123,14 @@
         </a>
 
         <!-- 4. FITCORE -->
-        <a href="https://kwnfactory2004.github.io/fitcore/" target="_blank" rel="noopener noreferrer" 
+        <a href="https://kwnfactory2004.github.io/fitcore/" target="_blank" rel="noopener noreferrer"
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
-             <div>
+            <div>
                 <div class="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
                     <i data-lucide="heart" class="w-7 h-7 text-accent"></i>
                 </div>
                 <h2 class="text-3xl font-bold mb-3 tracking-tight">FITCORE （β版）</h2>
-                <p class="text-gray-500 font-medium text-lg leading-relaxed">
-                    あなたの健康を守ります。
-                </p>
+                <p class="text-gray-500 font-medium text-lg leading-relaxed">あなたの健康を守ります。</p>
             </div>
             <div class="mt-10 flex justify-end">
                 <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center group-hover:bg-accent group-hover:border-accent group-hover:text-white transition-colors duration-300 text-gray-700 shadow-sm">
@@ -126,14 +139,30 @@
             </div>
         </a>
 
-        <!-- Information Title -->
+        <!-- 5. MoneyLog (New) -->
+        <a href="https://kwnfactory2004.github.io/moneylog/" target="_blank" rel="noopener noreferrer"
+           class="apple-card p-8 md:col-span-2 lg:col-span-4 flex flex-col justify-between group block outline-none">
+            <div>
+                <div class="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-6 group-hover:bg-[#0F4C3A]/10 transition-colors duration-300">
+                    <i data-lucide="wallet" class="w-7 h-7 text-accent"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-3 tracking-tight">MoneyLog</h2>
+                <p class="text-gray-500 font-medium text-lg leading-relaxed">お金の管理、おまかせあれ。</p>
+            </div>
+            <div class="mt-10 flex justify-end">
+                <div class="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center group-hover:bg-accent group-hover:border-accent group-hover:text-white transition-colors duration-300 text-gray-700 shadow-sm">
+                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                </div>
+            </div>
+        </a>
+
         <div class="md:col-span-2 lg:col-span-4 mt-8 mb-2 flex items-center gap-4">
              <div class="h-px bg-gray-200 flex-1"></div>
              <h3 class="text-xl font-bold text-gray-400 tracking-wider uppercase">Information</h3>
              <div class="h-px bg-gray-200 flex-1"></div>
         </div>
 
-        <!-- Location -->
+        <!-- Location (Google Maps) -->
         <a href="https://maps.app.goo.gl/bcoD2gDux7DdSDCa8" target="_blank" rel="noopener noreferrer" 
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
             <div class="mb-6">
@@ -141,19 +170,19 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                 </div>
                 <h2 class="text-3xl font-bold mb-3 tracking-tight">Location</h2>
-                <p class="text-gray-500 font-medium text-base leading-relaxed">
-                    KWN FACTORY.の所在地はこちらです。Googleマップで詳しい場所と経路をご確認いただけます。
+                <p class="text-gray-500 font-medium text-lg leading-relaxed">
+                    KWN FACTORYの所在地はこちら。<br>Googleマップで経路を確認できます。
                 </p>
             </div>
             <div class="mt-4 flex justify-end">
                 <div class="px-6 py-3 rounded-full bg-gray-900 group-hover:bg-accent transition-colors duration-300 text-white font-bold flex items-center gap-2 shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>
                     <span>Google Maps</span>
                 </div>
             </div>
         </a>
 
-        <!-- Instagram -->
+        <!-- Instagram Feedback -->
         <a href="https://www.instagram.com/kwnfactory.2004?stkn=bHYwa2NkMzk3eXpk&utm_source=qr" target="_blank" rel="noopener noreferrer" 
            class="apple-card p-8 md:col-span-2 lg:col-span-2 flex flex-col justify-between group block outline-none">
             <div class="mb-6">
@@ -177,7 +206,7 @@
     </main>
 
     <footer class="mt-24 text-center text-gray-400 text-sm font-medium">
-        <p>© 2026 KWN FACTORY. All rights reserved.</p>
+        <p>&copy; 2026 KWN FACTORY. All rights reserved.</p>
     </footer>
 
     <script>
