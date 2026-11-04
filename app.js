@@ -134,9 +134,32 @@ function setupA2hs() {
   });
 }
 
+// カード登場のずらし時間（同時に見えたカードの順番 × stepMs）
+export function staggerDelays(count, stepMs = 80) {
+  const n = Math.max(0, Math.floor(Number(count)) || 0);
+  return Array.from({ length: n }, (_, i) => i * stepMs);
+}
+
+// true = 登場演出をせず、すぐ全部見せる（IntersectionObserver が無い／動きを減らす設定）
+export function shouldRevealNow(env) {
+  try {
+    if (!env || typeof env.IntersectionObserver !== 'function') return true;
+    if (typeof env.matchMedia === 'function' && env.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+
+// 要素の枠（getBoundingClientRect の結果）が画面の高さと少しでも重なるか
+export function isInViewport(rect, viewportHeight) {
+  if (!rect || !(viewportHeight > 0)) return false;
+  return rect.bottom > 0 && rect.top < viewportHeight;
+}
+
 export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
-  if (visited) return { show: true, totalMs: 500 };
+  if (visited) return { show: true, totalMs: 1500 };
   return { show: true, totalMs: 3500 };
 }
 
@@ -271,8 +294,46 @@ export async function init() {
     grid.innerHTML = renderGroups(groupTools(tools, data.groups));
   }
   links.innerHTML = cleanLinks(data).map((l) => renderLink(l)).join('');
-  // 登場の順番（CSSの --i）はここで付ける（HTML文字列にstyle属性を埋め込まない）
-  document.querySelectorAll('#grid .card, #links .card').forEach((el, i) => el.style.setProperty('--i', i));
+  setupReveal();
+}
+
+// カードは画面に入った瞬間に登場させる。どこかで失敗したら全部すぐ見せる。
+function setupReveal() {
+  const cards = Array.from(document.querySelectorAll('#grid .card, #links .card'));
+  if (cards.length === 0 || shouldRevealNow(window)) return;
+  try {
+    cards.forEach((el) => el.classList.add('will-reveal'));
+    const io = new IntersectionObserver((entries) => {
+      try {
+        const seen = entries.filter((e) => e.isIntersecting);
+        const delays = staggerDelays(seen.length);
+        seen.forEach((e, i) => {
+          e.target.style.setProperty('--d', delays[i] + 'ms');
+          e.target.classList.add('is-in');
+          io.unobserve(e.target);
+        });
+      } catch (err) {
+        cards.forEach((el) => el.classList.add('is-in'));
+        io.disconnect();
+      }
+    }, { threshold: 0.15, rootMargin: '0px 0px -5% 0px' });
+    cards.forEach((el) => io.observe(el));
+    // 最後の砦: observer が一度も動かなくても、画面内のカードは隠れたままにしない
+    setTimeout(() => {
+      try {
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        cards.forEach((el) => {
+          if (el.classList.contains('will-reveal') && !el.classList.contains('is-in') && isInViewport(el.getBoundingClientRect(), vh)) {
+            el.classList.add('is-in');
+          }
+        });
+      } catch (err) {
+        cards.forEach((el) => el.classList.add('is-in'));
+      }
+    }, 4000);
+  } catch (e) {
+    cards.forEach((el) => el.classList.remove('will-reveal'));
+  }
 }
 
 if (typeof document !== 'undefined') {

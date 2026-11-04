@@ -57,7 +57,9 @@ body {
   padding: 22px;
   color: var(--text);
   text-decoration: none;
-  background: var(--card);
+  background:
+    linear-gradient(180deg, rgba(31, 107, 82, 0) 0, rgba(31, 107, 82, 0.16) 80%, #1F6B52 96%, rgba(31, 107, 82, 0) 100%) 0 calc(100% + 40px) / 100% 40px no-repeat,
+    var(--card);
   border: 1px solid rgba(15, 56, 44, 0.35);
   box-shadow: 0 1px 3px rgba(15, 56, 44, 0.08);
   transition: border-color .2s, box-shadow .2s;
@@ -115,14 +117,31 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .boot-skip { margin: 0; font-size: 11px; color: var(--muted); }
 @keyframes boot-spin { to { transform: rotate(360deg); } }
 
-/* カードの登場（--i の順に60msずつ）と、四隅ブラケットの伸び */
-.card { animation: card-in .45s ease-out backwards; animation-delay: calc(var(--i, 0) * 60ms); }
-.card::before, .card::after { animation: bracket-grow .5s ease-out backwards; animation-delay: calc(var(--i, 0) * 60ms + 120ms); }
-@keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { transform: none; } }
+/* カードの登場: 画面に入ると .is-in が付く。走査線が上から下へ走り、ちらつきながら現れ、四隅ブラケットが伸びる */
+.card.will-reveal:not(.is-in) { opacity: 0; }
+.card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 0; }
+.card.is-in {
+  animation: card-flicker .5s linear var(--d, 0ms) backwards, card-scan .6s ease-in var(--d, 0ms) forwards;
+}
+.card.is-in::before, .card.is-in::after { animation: bracket-grow .5s ease-out calc(var(--d, 0ms) + 120ms) backwards; }
+@keyframes card-flicker { 0% { opacity: 0; } 20% { opacity: 0.5; } 40% { opacity: 0.15; } 60% { opacity: 0.8; } 75% { opacity: 0.3; } }
+@keyframes card-scan { from { background-position: 0 -40px; } to { background-position: 0 calc(100% + 40px); } }
 @keyframes bracket-grow { from { height: 0; opacity: 0; } to { height: 14px; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  #boot { display: none; }
+  .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
+  .card.is-soon.will-reveal:not(.is-in) { opacity: 0.55; }
+  .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
+}
+
+/* 印刷・PDF保存: 隠れたカードを残さない */
+@media print {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
+  .card.is-soon.will-reveal:not(.is-in) { opacity: 0.55; }
+  .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
   #boot { display: none; }
 }
 
