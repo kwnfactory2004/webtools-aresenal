@@ -35,19 +35,18 @@ body {
 .site-title { margin: 0; font-size: 24px; line-height: 1.2; }
 .site-lead { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 
-#grid, #links { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.tool-grid, #links { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 #links { margin-top: 16px; }
 #grid > [role="alert"], #grid > .empty {
   padding: 24px; border: 1px solid rgba(15, 56, 44, 0.35); background: var(--card);
   text-align: center;
 }
 @media (min-width: 768px) {
-  #grid { grid-template-columns: repeat(2, 1fr); }
-  #grid > [role="alert"], #grid > .empty { grid-column: 1 / -1; }
+  .tool-grid { grid-template-columns: repeat(2, 1fr); }
   .card--large { grid-column: span 2; }
 }
 @media (min-width: 1024px) {
-  #grid { grid-template-columns: repeat(4, 1fr); }
+  .tool-grid { grid-template-columns: repeat(4, 1fr); }
   #links { grid-template-columns: repeat(4, 1fr); }
   .card--link { grid-column: span 2; }
 }
@@ -160,7 +159,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .section-label + #links { margin-top: 0; }
-.section-label:not(:first-of-type) { margin-top: 28px; }
+.group + .group, #grid + .section-label { margin-top: 28px; }
 .noscript { text-align: center; color: var(--text); }
 
 /* ---- ホーム画面に追加する案内 ---- */

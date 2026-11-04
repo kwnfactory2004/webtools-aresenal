@@ -1,12 +1,15 @@
 {
+  "groups": [{"id": "study", "label": "[01] STUDY"}, {"id": "life", "label": "[02] LIFE"}],
   "tools": [
-    { "id": "timegrid", "name": "TimeGrid", "description": "機能はひとつ。授業予定の確認だけ。", "url": "https://kwnfactory2004.github.io/schoolcalendar/", "icon": "calendar", "status": "live", "size": "large" },
-    { "id": "study1k", "name": "Study 1K", "description": "一級整備士の分野別勉強アプリ。パスワード付き（本人用）。", "url": "https://kwnfactory2004.github.io/study-1k/", "icon": "book-open", "status": "live", "size": "small" },
-    { "id": "pomodoro", "name": "Pomodoro Timer", "description": "余裕を生み出す、25分の魔法。", "url": "https://kwnfactory2004.github.io/pomodoro/", "icon": "timer", "status": "live", "size": "small" },
-    { "id": "fitcore", "name": "FITCORE", "description": "あなたの健康を守ります。", "url": "https://kwnfactory2004.github.io/fitcore/", "icon": "heart", "status": "beta", "size": "large" },
-    { "id": "moneylog", "name": "MoneyLog", "description": "お金の管理、おまかせあれ。", "url": "https://kwnfactory2004.github.io/moneylog/", "icon": "wallet", "status": "live", "size": "large" }
+    {"id": "study1k", "name": "Study 1K", "description": "一級整備士の分野別勉強アプリ。", "url": "https://kwnfactory2004.github.io/study-1k/", "icon": "book-open", "status": "live", "size": "small", "group": "study"},
+    {"id": "study2k", "name": "Study 2K", "description": "二級整備士（ガソリン・ジーゼル・シャシ）の対策アプリ。", "url": "https://kwnfactory2004.github.io/study-2k/", "icon": "wrench", "status": "live", "size": "small", "group": "study"},
+    {"id": "studyotsu4", "name": "Study OTSU4", "description": "乙四（危険物取扱者）の4択対策。AI作成の150問。", "url": "https://kwnfactory2004.github.io/study-otsu4/", "icon": "flame", "status": "live", "size": "small", "group": "study"},
+    {"id": "pomodoro", "name": "Pomodoro Timer", "description": "余裕を生み出す、25分の魔法。", "url": "https://kwnfactory2004.github.io/pomodoro/", "icon": "timer", "status": "live", "size": "small", "group": "study"},
+    {"id": "timegrid", "name": "TimeGrid", "description": "機能はひとつ。授業予定の確認だけ。", "url": "https://kwnfactory2004.github.io/schoolcalendar/", "icon": "calendar", "status": "live", "size": "large", "group": "life"},
+    {"id": "fitcore", "name": "FITCORE", "description": "あなたの健康を守ります。", "url": "https://kwnfactory2004.github.io/fitcore/", "icon": "heart", "status": "beta", "size": "small", "group": "life"},
+    {"id": "moneylog", "name": "MoneyLog", "description": "お金の管理、おまかせあれ。", "url": "https://kwnfactory2004.github.io/moneylog/", "icon": "wallet", "status": "live", "size": "small", "group": "life"}
   ],
   "links": [
-    { "id": "instagram", "name": "Instagram", "handle": "@kwnfactory.2004", "description": "こんな機能がほしい・バグを見つけた、などの連絡はInstagramへ。", "url": "https://www.instagram.com/kwnfactory.2004/", "icon": "instagram" }
+    {"id": "instagram", "name": "Instagram", "handle": "@kwnfactory.2004", "description": "こんな機能がほしい・バグを見つけた、などの連絡はInstagramへ。", "url": "https://www.instagram.com/kwnfactory.2004/", "icon": "instagram"}
   ]
 }
