@@ -157,6 +157,31 @@ export function isInViewport(rect, viewportHeight) {
   return rect.bottom > 0 && rect.top < viewportHeight;
 }
 
+// 文字を1文字ずつに分ける（絵文字などのサロゲートペアも1文字として扱う）
+export function splitChars(text) {
+  return Array.from(String(text ?? ''));
+}
+
+// 打ち込みの計画。texts[0] は見出し（速め）、残りは本文。各文字の開始ms・1文字の幅・全体の時間を返す。
+// 全体が maxTotalMs を超えるときは、1文字あたりの間隔を縮める。
+export function typingPlan(texts, { titleMs = 35, bodyMs = 18, maxTotalMs = 1400 } = {}) {
+  const lists = (Array.isArray(texts) ? texts : []).map(splitChars);
+  const stepOf = (k) => (k === 0 ? titleMs : bodyMs);
+  const raw = lists.reduce((sum, chars, k) => sum + chars.length * stepOf(k), 0);
+  const scale = raw > maxTotalMs ? maxTotalMs / raw : 1;
+  let t = 0;
+  const delays = [];
+  const widths = [];
+  lists.forEach((chars, k) => {
+    const step = stepOf(k) * scale;
+    const base = t;
+    delays.push(chars.map((_, i) => base + i * step));
+    widths.push(chars.map(() => step));
+    t += chars.length * step;
+  });
+  return { delays, widths, totalMs: Math.min(t, maxTotalMs) };
+}
+
 export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
   if (visited) return { show: true, totalMs: 1500 };
@@ -298,6 +323,59 @@ export async function init() {
 }
 
 // カードは画面に入った瞬間に登場させる。どこかで失敗したら全部すぐ見せる。
+const TYPE_START_MS = 150; // カードのふわっとした登場のあとに打ち始める
+
+// カード内の文字を1文字ずつ打ち込む。分割は再生中だけで、終わったら元の文字に戻す。
+function typeCard(card) {
+  if (card.classList.contains('is-soon')) return;
+  const jobs = [];
+  card.querySelectorAll('.card-title, .card-handle, .card-desc').forEach((el) => {
+    Array.from(el.childNodes).forEach((node) => {
+      if (node.nodeType === 3 && node.data.trim()) jobs.push({ el, node, text: node.data, wrap: null });
+    });
+  });
+  if (jobs.length === 0) return;
+  const restore = () => jobs.forEach((j) => {
+    if (j.wrap && j.wrap.parentNode === j.el) j.el.replaceChild(j.node, j.wrap);
+    j.wrap = null;
+  });
+  try {
+    const plan = typingPlan(jobs.map((j) => j.text));
+    jobs.forEach((j, k) => {
+      const wrap = document.createElement('span');
+      wrap.className = 'typed';
+      const vis = document.createElement('span');
+      vis.className = 'typed-vis';
+      vis.setAttribute('aria-hidden', 'true');
+      splitChars(j.text).forEach((c, i) => {
+        const ch = document.createElement('span');
+        ch.className = 'ch';
+        ch.textContent = c;
+        ch.style.setProperty('--t', (TYPE_START_MS + plan.delays[k][i]) + 'ms');
+        ch.style.setProperty('--w', plan.widths[k][i] + 'ms');
+        if (k === jobs.length - 1 && i === plan.delays[k].length - 1) ch.classList.add('ch-last');
+        vis.appendChild(ch);
+      });
+      const sr = document.createElement('span');
+      sr.className = 'sr-only';
+      sr.textContent = j.text;
+      wrap.append(vis, sr);
+      j.el.replaceChild(wrap, j.node);
+      j.wrap = wrap;
+    });
+    const d = parseFloat(card.style.getPropertyValue('--d')) || 0;
+    setTimeout(restore, d + TYPE_START_MS + plan.totalMs + 600);
+  } catch (e) {
+    restore();
+  }
+}
+
+function revealCard(card) {
+  card.classList.add('is-in');
+  typeCard(card);
+}
+
+// カードは画面に入った瞬間に登場させる。どこかで失敗したら全部すぐ見せる。
 function setupReveal() {
   const cards = Array.from(document.querySelectorAll('#grid .card, #links .card'));
   if (cards.length === 0 || shouldRevealNow(window)) return;
@@ -309,7 +387,7 @@ function setupReveal() {
         const delays = staggerDelays(seen.length);
         seen.forEach((e, i) => {
           e.target.style.setProperty('--d', delays[i] + 'ms');
-          e.target.classList.add('is-in');
+          revealCard(e.target);
           io.unobserve(e.target);
         });
       } catch (err) {
@@ -324,7 +402,7 @@ function setupReveal() {
         const vh = window.innerHeight || document.documentElement.clientHeight;
         cards.forEach((el) => {
           if (el.classList.contains('will-reveal') && !el.classList.contains('is-in') && isInViewport(el.getBoundingClientRect(), vh)) {
-            el.classList.add('is-in');
+            revealCard(el);
           }
         });
       } catch (err) {

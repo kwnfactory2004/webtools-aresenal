@@ -33,7 +33,6 @@ body {
 }
 .site-brand { margin: 0; font-size: 12px; color: var(--glow); }
 .site-title { margin: 0; font-size: 24px; line-height: 1.2; }
-.site-lead { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
 
 .tool-grid, #links { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 #links { margin-top: 16px; }
@@ -57,9 +56,7 @@ body {
   padding: 22px;
   color: var(--text);
   text-decoration: none;
-  background:
-    linear-gradient(180deg, rgba(31, 107, 82, 0) 0, rgba(31, 107, 82, 0.16) 80%, #1F6B52 96%, rgba(31, 107, 82, 0) 100%) 0 calc(100% + 40px) / 100% 40px no-repeat,
-    var(--card);
+  background: var(--card);
   border: 1px solid rgba(15, 56, 44, 0.35);
   box-shadow: 0 1px 3px rgba(15, 56, 44, 0.08);
   transition: border-color .2s, box-shadow .2s;
@@ -117,20 +114,35 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .boot-skip { margin: 0; font-size: 11px; color: var(--muted); }
 @keyframes boot-spin { to { transform: rotate(360deg); } }
 
-/* カードの登場: 画面に入ると .is-in が付く。走査線が上から下へ走り、ちらつきながら現れ、四隅ブラケットが伸びる */
+/* カードの登場: 画面に入ると .is-in が付く。下からふわっと出て、四隅ブラケットが伸び、文字が1文字ずつ打ち込まれる */
 .card.will-reveal:not(.is-in) { opacity: 0; }
 .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 0; }
-.card.is-in {
-  animation: card-flicker .5s linear var(--d, 0ms) backwards, card-scan .6s ease-in var(--d, 0ms) forwards;
-}
+.card.is-in { animation: card-in .45s ease-out var(--d, 0ms) backwards; }
 .card.is-in::before, .card.is-in::after { animation: bracket-grow .5s ease-out calc(var(--d, 0ms) + 120ms) backwards; }
-@keyframes card-flicker { 0% { opacity: 0; } 20% { opacity: 0.5; } 40% { opacity: 0.15; } 60% { opacity: 0.8; } 75% { opacity: 0.3; } }
-@keyframes card-scan { from { background-position: 0 -40px; } to { background-position: 0 calc(100% + 40px); } }
+@keyframes card-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes bracket-grow { from { height: 0; opacity: 0; } to { height: 14px; opacity: 1; } }
+
+/* 打ち込み: 文字の場所は最初から確保（visibility）。打たれた文字から見え、入力位置に細い縦棒のカーソルが出る */
+.ch { position: relative; visibility: hidden; animation: ch-in .01s linear calc(var(--d, 0ms) + var(--t, 0ms)) forwards; }
+.ch::after {
+  content: ""; position: absolute; left: 100%; top: 8%; bottom: 8%; width: 2px; margin-left: 1px;
+  background: var(--glow); opacity: 0;
+  animation: ch-cursor var(--w, 20ms) steps(1, end) calc(var(--d, 0ms) + var(--t, 0ms));
+}
+.ch-last::after { animation: ch-blink .4s steps(1, end) calc(var(--d, 0ms) + var(--t, 0ms)); }
+@keyframes ch-in { to { visibility: visible; } }
+@keyframes ch-cursor { from { opacity: 1; } to { opacity: 1; } }
+@keyframes ch-blink { 0% { opacity: 1; } 25% { opacity: 0; } 50% { opacity: 1; } 75%, 100% { opacity: 0; } }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   #boot { display: none; }
+  .ch { visibility: visible; }
+  .ch::after { display: none; }
   .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
   .card.is-soon.will-reveal:not(.is-in) { opacity: 0.55; }
   .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
@@ -142,6 +154,8 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
   .card.is-soon.will-reveal:not(.is-in) { opacity: 0.55; }
   .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
+  .ch { visibility: visible; }
+  .ch::after, .sr-only { display: none; }
   #boot { display: none; }
 }
 
