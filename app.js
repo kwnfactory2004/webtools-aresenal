@@ -137,7 +137,7 @@ function setupA2hs() {
 export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
   if (visited) return { show: true, totalMs: 500 };
-  return { show: true, totalMs: 2000 };
+  return { show: true, totalMs: 3500 };
 }
 
 const VISITED_KEY = 'kwn-arsenal-visited';
