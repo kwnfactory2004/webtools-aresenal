@@ -7,6 +7,8 @@ const ICON_BODIES = {
   'heart': '<path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path>',
   'wallet': '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path>',
   'instagram': '<rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line>',
+  'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>',
+  'flame': '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
   'arrow-right': '<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
 };
 
@@ -60,6 +62,31 @@ export function renderCard(tool) {
     return `<div class="${classes.join(' ')}" aria-disabled="true">${inner}</div>`;
   }
   return `<a class="${classes.join(' ')}" href="${escapeHtml(tool.url)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
+}
+
+// ツールをグループごとに分ける。groups が無い／壊れているときは、全部を1つのグループ（ラベルなし）にする。
+export function groupTools(tools, groups) {
+  const valid = Array.isArray(groups)
+    ? groups.filter((g) => g && typeof g.id === 'string' && g.id && typeof g.label === 'string')
+    : [];
+  if (valid.length === 0) return [{ id: 'all', label: '', tools: [...tools] }];
+  const sections = valid.map((g) => ({ id: g.id, label: g.label, tools: [] }));
+  const other = { id: 'other', label: 'その他', tools: [] };
+  for (const t of tools) {
+    const sec = sections.find((x) => x.id === t.group);
+    (sec || other).tools.push(t);
+  }
+  if (other.tools.length) sections.push(other);
+  return sections.filter((x) => x.tools.length > 0);
+}
+
+export function renderGroups(sections) {
+  return sections
+    .map((sec) => {
+      const label = sec.label ? `<p class="section-label">${escapeHtml(sec.label)}</p>` : '';
+      return `<section class="group">${label}<div class="tool-grid">${sec.tools.map((t) => renderCard(t)).join('')}</div></section>`;
+    })
+    .join('');
 }
 
 export function renderLink(link) {
@@ -241,13 +268,11 @@ export async function init() {
   if (tools.length === 0) {
     grid.innerHTML = '<p class="empty">ツールがありません</p>';
   } else {
-    grid.innerHTML = tools.map((t) => renderCard(t)).join('');
+    grid.innerHTML = renderGroups(groupTools(tools, data.groups));
   }
   links.innerHTML = cleanLinks(data).map((l) => renderLink(l)).join('');
   // 登場の順番（CSSの --i）はここで付ける（HTML文字列にstyle属性を埋め込まない）
-  for (const area of [grid, links]) {
-    area.querySelectorAll('.card').forEach((el, i) => el.style.setProperty('--i', i));
-  }
+  document.querySelectorAll('#grid .card, #links .card').forEach((el, i) => el.style.setProperty('--i', i));
 }
 
 if (typeof document !== 'undefined') {
