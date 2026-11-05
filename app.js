@@ -1,4 +1,5 @@
 // Web Tools Arsenal - 描画用の関数（ブラウザ専用の処理は別途追加する）
+import { buildSwarmPlan, runSwarm, swarmCount } from './swarm.js';
 
 const ICON_BODIES = {
   'calendar': '<path d="M8 2v3"></path><path d="M16 2v3"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path>',
@@ -185,7 +186,33 @@ export function typingPlan(texts, { titleMs = 35, bodyMs = 18, maxTotalMs = 1400
 export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
   if (visited) return { show: true, totalMs: 1500 };
-  return { show: true, totalMs: 3500 };
+  return { show: true, totalMs: 8000 };
+}
+
+// 起動の文字の段階。INITIALIZING 15% / LOADING 4段 55% / READY 20% / フェード 10%。
+// 群れの仕上げ（swarm.js の PHASE.finish = 70%）は READY の始まりと同じ時刻。
+export function bootStage(tMs, totalMs) {
+  const p = totalMs > 0 ? Math.min(1, Math.max(0, tMs / totalMs)) : 1;
+  if (p < 0.15) return { text: 'INITIALIZING...', leaving: false };
+  if (p < 0.7) {
+    const n = Math.min(4, Math.floor(((p - 0.15) / 0.55) * 4 + 1e-9) + 1);
+    return { text: 'LOADING TOOLS [' + barOf(n) + ']', leaving: false };
+  }
+  return { text: 'READY', leaving: p >= 0.9 };
+}
+
+// 起動演出の後始末で、どのカードを今すぐ見せるか（純粋）。states: [{ revealed, inView }]
+// mode: 'skip' / 'error' = まだ出ていない全部を演出なしで。'done' = 画面内の残りを普通の登場で。
+// 'interrupt'（スクロール・リサイズ）= 画面内の残りを演出なしで。戻り値: [{ index, animate }]
+export function cardsToRevealNow(states, mode) {
+  const list = Array.isArray(states) ? states : [];
+  const everything = mode === 'skip' || mode === 'error' || mode === 'fatal';
+  const out = [];
+  list.forEach((s, index) => {
+    if (!s || s.revealed) return;
+    if (everything || s.inView) out.push({ index, animate: mode === 'done' });
+  });
+  return out;
 }
 
 const VISITED_KEY = 'kwn-arsenal-visited';
@@ -210,77 +237,14 @@ export function markVisited() {
   }
 }
 
-// ---- ブラウザ専用: 画面の組み立て ----
-let skipBoot = null; // 起動アニメを今すぐ終わらせる関数（動いていないときは null）
 
+// ---- ブラウザ専用: 画面の組み立て ----
 function wantsReducedMotion() {
   try {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   } catch (e) {
     return false;
   }
-}
-
-export async function runBoot() {
-  const boot = document.getElementById('boot');
-  const plan = bootPlan({ visited: readVisited(), reducedMotion: wantsReducedMotion() });
-  if (!boot) { markVisited(); return; }
-  if (!plan.show) {
-    boot.remove();
-    markVisited();
-    return;
-  }
-
-  const FADE_MS = 200;
-  const stepsMs = Math.max(0, plan.totalMs - FADE_MS);
-  const text = boot.querySelector('.boot-text');
-  const setText = (t) => { if (text) text.textContent = t; };
-  boot.hidden = false;
-  setText('INITIALIZING...');
-
-  let finished = false;
-  let wake = null;
-  const timers = [];
-  const wait = (ms) => new Promise((resolve) => {
-    const id = setTimeout(resolve, ms);
-    timers.push(id);
-    wake = resolve;
-  });
-  const onKey = (e) => { if (e.key === 'Enter') skip(); };
-  function skip() {
-    if (finished) return;
-    finished = true;
-    timers.forEach(clearTimeout);
-    if (wake) wake();
-  }
-  skipBoot = skip;
-  boot.addEventListener('click', skip);
-  document.addEventListener('keydown', onKey);
-
-  // 待ち時間を割り振る: INITIALIZING 30% / LOADING 55%（4マス） / READY 15%
-  await wait(stepsMs * 0.3);
-  if (!finished) {
-    const per = (stepsMs * 0.55) / 4;
-    for (let n = 1; n <= 4 && !finished; n++) {
-      setText('LOADING TOOLS [' + barOf(n) + ']');
-      await wait(per);
-    }
-  }
-  if (!finished) {
-    setText('READY');
-    await wait(stepsMs * 0.15);
-  }
-  if (!finished) {
-    boot.classList.add('is-leaving');
-    await wait(FADE_MS);
-  }
-
-  finished = true;
-  skipBoot = null;
-  boot.removeEventListener('click', skip);
-  document.removeEventListener('keydown', onKey);
-  boot.remove();
-  markVisited();
 }
 
 async function loadTools() {
@@ -296,49 +260,32 @@ async function loadTools() {
   }
 }
 
-export async function init() {
-  const grid = document.getElementById('grid');
-  const links = document.getElementById('links');
-  grid.innerHTML = '<p class="empty">読み込み中…</p>';
-  // 読み込みは起動アニメと同時に始める。失敗したらアニメを切り上げてエラーを見せる。
-  const loading = loadTools().then(
-    (v) => ({ ok: true, v }),
-    () => { if (skipBoot) skipBoot(); return { ok: false }; }
-  );
-  await runBoot();
-  const r = await loading;
-  if (!r.ok) {
-    grid.innerHTML = '<p role="alert">読み込めませんでした</p>';
-    links.innerHTML = '';
-    return;
-  }
-  const { data, tools } = r.v;
-  if (tools.length === 0) {
-    grid.innerHTML = '<p class="empty">ツールがありません</p>';
-  } else {
-    grid.innerHTML = renderGroups(groupTools(tools, data.groups));
-  }
-  links.innerHTML = cleanLinks(data).map((l) => renderLink(l)).join('');
-  setupReveal();
-}
-
-// カードは画面に入った瞬間に登場させる。どこかで失敗したら全部すぐ見せる。
 const TYPE_START_MS = 150; // カードのふわっとした登場のあとに打ち始める
+const activeTypings = new Set(); // 打ち込み途中のカードを元の文字に戻す関数（スキップ用）
 
-// カード内の文字を1文字ずつ打ち込む。分割は再生中だけで、終わったら元の文字に戻す。
-function typeCard(card) {
-  if (card.classList.contains('is-soon')) return;
+// 打ち込み対象の文字（見出し・ハンドル・説明の、文字だけのノード）
+function cardJobs(card) {
   const jobs = [];
+  if (card.classList.contains('is-soon')) return jobs;
   card.querySelectorAll('.card-title, .card-handle, .card-desc').forEach((el) => {
     Array.from(el.childNodes).forEach((node) => {
       if (node.nodeType === 3 && node.data.trim()) jobs.push({ el, node, text: node.data, wrap: null });
     });
   });
+  return jobs;
+}
+
+// カード内の文字を1文字ずつ打ち込む。分割は再生中だけで、終わったら元の文字に戻す。
+function typeCard(card) {
+  const jobs = cardJobs(card);
   if (jobs.length === 0) return;
-  const restore = () => jobs.forEach((j) => {
-    if (j.wrap && j.wrap.parentNode === j.el) j.el.replaceChild(j.node, j.wrap);
-    j.wrap = null;
-  });
+  const restore = () => {
+    jobs.forEach((j) => {
+      if (j.wrap && j.wrap.parentNode === j.el) j.el.replaceChild(j.node, j.wrap);
+      j.wrap = null;
+    });
+    activeTypings.delete(restore);
+  };
   try {
     const plan = typingPlan(jobs.map((j) => j.text));
     jobs.forEach((j, k) => {
@@ -363,6 +310,7 @@ function typeCard(card) {
       j.el.replaceChild(wrap, j.node);
       j.wrap = wrap;
     });
+    activeTypings.add(restore);
     const d = parseFloat(card.style.getPropertyValue('--d')) || 0;
     setTimeout(restore, d + TYPE_START_MS + plan.totalMs + 600);
   } catch (e) {
@@ -370,47 +318,390 @@ function typeCard(card) {
   }
 }
 
+function restoreAllTypings() {
+  Array.from(activeTypings).forEach((fn) => fn());
+}
+
 function revealCard(card) {
   card.classList.add('is-in');
   typeCard(card);
 }
 
-// カードは画面に入った瞬間に登場させる。どこかで失敗したら全部すぐ見せる。
-function setupReveal() {
-  const cards = Array.from(document.querySelectorAll('#grid .card, #links .card'));
-  if (cards.length === 0 || shouldRevealNow(window)) return;
+// 演出なしで、すぐ見せる（スキップ用）
+function revealNow(card) {
+  if (card.classList.contains('is-in')) return;
+  card.classList.add('no-anim', 'is-in');
+}
+
+// ---- 群れの目標（カードの位置）を測る ----
+function textBox(el) {
   try {
-    cards.forEach((el) => el.classList.add('will-reveal'));
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+    return rects;
+  } catch (e) {
+    return [];
+  }
+}
+
+function describeTarget(card, id) {
+  const rr = card.getBoundingClientRect();
+  const target = { id, rect: { x: rr.left, y: rr.top, w: rr.width, h: rr.height } };
+  try {
+    const titleEl = card.querySelector('.card-title');
+    const tr = titleEl ? textBox(titleEl) : [];
+    if (tr.length) {
+      const left = Math.min(...tr.map((r) => r.left));
+      const top = Math.min(...tr.map((r) => r.top));
+      target.title = { x: left, y: top, w: Math.max(...tr.map((r) => r.right)) - left, h: Math.max(...tr.map((r) => r.bottom)) - top };
+    }
+    const descEl = card.querySelector('.card-desc');
+    const dr = descEl ? textBox(descEl) : [];
+    if (dr.length) {
+      const last = dr[dr.length - 1];
+      target.descEnd = { x: last.right, y: last.top };
+    }
+    const tp = typingPlan(cardJobs(card).map((j) => j.text));
+    const first = tp.delays[0];
+    target.typing = {
+      titleMs: first && first.length ? first[first.length - 1] + tp.widths[0][first.length - 1] : 0,
+      totalMs: tp.totalMs,
+    };
+  } catch (e) {
+    // 測れないときは、カードの枠だけで計画する
+  }
+  return target;
+}
+
+// 画面に見えているカードを左上→右下の順に並べる
+function visibleCardsInOrder(cards) {
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  return cards
+    .map((el) => ({ el, r: el.getBoundingClientRect() }))
+    .filter(({ r }) => isInViewport(r, vh) && r.right > 0 && r.left < vw)
+    .sort((a, b) => (Math.abs(a.r.top - b.r.top) > 8 ? a.r.top - b.r.top : a.r.left - b.r.left))
+    .map(({ el }) => el);
+}
+
+function canvasUsable(canvas) {
+  try {
+    return !!(canvas && typeof canvas.getContext === 'function' && canvas.getContext('2d'));
+  } catch (e) {
+    return false;
+  }
+}
+
+const randomSeed = () => Math.floor(Math.random() * 2147483647);
+
+// 使い終わった canvas は大きさ0にして隠す（常時の全画面レイヤーを残さない）。次に使うときに runSwarm が大きさを付け直す
+function releaseCanvas(canvas) {
+  try {
+    if (canvas) { canvas.width = 0; canvas.height = 0; canvas.hidden = true; }
+  } catch (e) {
+    // 何もしない
+  }
+}
+
+// #boot の中にフォーカスがあったまま外すと body に落ちるので、見えているものへ移す
+function moveFocusToPage(cards) {
+  try {
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const first = cards.find((el) => el.tagName === 'A' && el.classList.contains('is-in') && isInViewport(el.getBoundingClientRect(), vh));
+    const target = first || document.querySelector('.site-title');
+    if (!target) return;
+    if (!first && !target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+  } catch (e) {
+    // 何もしない
+  }
+}
+
+let activeIntroEnd = null; // 起動演出を今すぐ終える関数（動いていないときは null）
+
+// 何があっても最後に「全カードが見える・#boot が無い」状態にする
+function forceAllVisible(boot, cards) {
+  try { if (activeIntroEnd) activeIntroEnd('error'); } catch (e) { /* 次へ */ }
+  try { restoreAllTypings(); } catch (e) { /* 次へ */ }
+  try { cards.forEach(revealNow); } catch (e) { /* 次へ */ }
+  try { releaseCanvas(document.getElementById('swarm')); } catch (e) { /* 次へ */ }
+  try { if (boot) boot.remove(); } catch (e) { /* 次へ */ }
+}
+
+// ---- 起動演出: 群れがカードを組み立てる。起動の文字も同じ時計（runSwarm）で進める ----
+// 終わる（または途中でやめる）と resolve。#boot はここで取り除く。
+function runIntro(boot, cards, totalMs, visited) {
+  return new Promise((resolve) => {
+    const text = boot.querySelector('.boot-text');
+    const canvas = document.getElementById('swarm');
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const startScroll = window.scrollY || 0;
+    const ctrl = new AbortController();
+    let ended = false;
+    let lastText = '';
+    const skipBtn = boot.querySelector('.boot-skip');
+    // 透明なカードにフォーカスが乗らないよう、演出中だけ Tab の順番から外す
+    const tabbed = [];
+    cards.forEach((el) => {
+      if (!el.classList.contains('is-in') && !el.hasAttribute('tabindex')) { el.setAttribute('tabindex', '-1'); tabbed.push(el); }
+    });
+    activeIntroEnd = (mode) => end(mode);
+    const setText = (t) => { if (text && t !== lastText) { text.textContent = t; lastText = t; } };
+    const fadeMs = Math.round(totalMs * 0.1);
+    boot.style.setProperty('--boot-fade', fadeMs + 'ms');
+    setText('INITIALIZING...');
+
+    function end(mode) {
+      if (ended) return;
+      ended = true;
+      activeIntroEnd = null;
+      ctrl.abort();
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      const focusWasInBoot = boot.contains(document.activeElement);
+      try {
+        if (mode === 'skip' || mode === 'error') restoreAllTypings();
+        const vh2 = window.innerHeight || document.documentElement.clientHeight;
+        const states = cards.map((el) => ({ revealed: el.classList.contains('is-in'), inView: isInViewport(el.getBoundingClientRect(), vh2) }));
+        cardsToRevealNow(states, mode).forEach(({ index, animate }) => {
+          if (animate) revealCard(cards[index]); else revealNow(cards[index]);
+        });
+      } catch (e) {
+        cards.forEach(revealNow);
+      }
+      tabbed.forEach((el) => el.removeAttribute('tabindex'));
+      releaseCanvas(canvas);
+      boot.remove();
+      if (focusWasInBoot) moveFocusToPage(cards);
+      markVisited();
+      resolve();
+    }
+    function onKey(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        end('skip');
+      }
+    }
+    function onClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      end('skip');
+    }
+    // 位置が変わると、飛んでいく先がずれる。止めて、見えているカードを出す
+    function onScroll() { if (Math.abs((window.scrollY || 0) - startScroll) > 24) end('interrupt'); }
+    function onResize() {
+      const w = window.innerWidth || document.documentElement.clientWidth;
+      const h = window.innerHeight || document.documentElement.clientHeight;
+      if (w !== vw || Math.abs(h - vh) > 120) end('interrupt');
+    }
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('click', onClick, true);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    if (skipBtn) skipBtn.hidden = false; // スキップできる状態になってから見せる
+
+    // 計画。canvas が使えない・計画に失敗したときは、群れ無しで起動の文字だけ（時計は同じ）
+    const useCanvas = canvasUsable(canvas);
+    let plan = null;
+    const byId = new Map();
+    if (useCanvas) {
+      try {
+        const count = visited ? 16 : swarmCount({ w: vw, h: vh });
+        const picked = visibleCardsInOrder(cards).slice(0, Math.max(1, Math.floor(count / 4)));
+        const targets = picked.map((el, i) => {
+          const id = 'card-' + i;
+          byId.set(id, el);
+          return describeTarget(el, id);
+        });
+        plan = buildSwarmPlan({ targets, count, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh } });
+      } catch (e) {
+        plan = null;
+      }
+    }
+    if (!plan) {
+      plan = { totalMs, viewport: { w: vw, h: vh }, scan: false, finishAt: totalMs, cursors: [], reveals: [] };
+    }
+    if (useCanvas) canvas.hidden = false;
+    runSwarm({
+      canvas: useCanvas ? canvas : null,
+      plan,
+      signal: ctrl.signal,
+      onReveal: ({ cardId }) => {
+        const el = byId.get(cardId);
+        if (el && !el.classList.contains('is-in')) revealCard(el);
+      },
+      onTick: (t) => {
+        const s = bootStage(t, totalMs);
+        setText(s.text);
+        if (s.leaving) boot.classList.add('is-leaving');
+      },
+      onDone: () => end('done'),
+      onError: () => end('error'),
+    });
+  });
+}
+
+// ---- スクロールで入ったカード: 今まで通り IntersectionObserver で登場。小さな群れ（5個前後）が飛んでくる ----
+const MINI_MAX_CARDS = 3;
+let miniBusy = false;
+let miniTimer = null;
+let miniCtrl = null;
+
+function miniFinish(canvas) {
+  miniBusy = false;
+  if (miniTimer) { clearTimeout(miniTimer); miniTimer = null; }
+  miniCtrl = null;
+  releaseCanvas(canvas);
+}
+
+function revealBatch(els) {
+  const plain = (list) => {
+    const delays = staggerDelays(list.length);
+    list.forEach((el, i) => {
+      el.style.setProperty('--d', delays[i] + 'ms');
+      revealCard(el);
+    });
+  };
+  const canvas = document.getElementById('swarm');
+  // 小さな群れは同時に1つだけ（同じ canvas を取り合わない）。動いている間の追加分は、群れ無しで従来通り登場
+  if (miniBusy || !canvasUsable(canvas)) { plain(els); return; }
+  try {
+    const group = els.slice(0, MINI_MAX_CARDS);
+    const rest = els.slice(MINI_MAX_CARDS);
+    const byId = new Map();
+    const targets = group.map((el, i) => {
+      const id = 'mini-' + i;
+      byId.set(id, el);
+      return describeTarget(el, id);
+    });
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const totalMs = 900 + 250 * (group.length - 1);
+    const plan = buildSwarmPlan({ targets, count: group.length * 5, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false });
+    const flush = () => group.forEach((el) => { if (!el.classList.contains('is-in')) revealCard(el); });
+    miniBusy = true;
+    miniCtrl = new AbortController();
+    canvas.hidden = false;
+    runSwarm({
+      canvas,
+      plan,
+      signal: miniCtrl.signal,
+      onReveal: ({ cardId }) => {
+        const el = byId.get(cardId);
+        if (el && !el.classList.contains('is-in')) revealCard(el);
+      },
+      onDone: () => miniFinish(canvas),
+      onError: () => { miniFinish(canvas); flush(); },
+    });
+    // 念のため: 何かで動かなくても、カードは隠れたままにしない
+    miniTimer = setTimeout(() => {
+      miniTimer = null;
+      if (miniCtrl) miniCtrl.abort();
+      flush();
+      miniFinish(canvas);
+    }, totalMs + 600);
+    if (rest.length) plain(rest);
+  } catch (e) {
+    miniFinish(canvas);
+    plain(els);
+  }
+}
+
+// 群れのあと、まだ出ていないカード（画面の下にあったもの）は、画面に入った瞬間に登場させる。
+function setupReveal(cards) {
+  const pending = cards.filter((el) => !el.classList.contains('is-in'));
+  if (pending.length === 0) return;
+  try {
     const io = new IntersectionObserver((entries) => {
       try {
         const seen = entries.filter((e) => e.isIntersecting);
-        const delays = staggerDelays(seen.length);
-        seen.forEach((e, i) => {
-          e.target.style.setProperty('--d', delays[i] + 'ms');
-          revealCard(e.target);
-          io.unobserve(e.target);
-        });
+        if (seen.length === 0) return;
+        seen.forEach((e) => io.unobserve(e.target));
+        revealBatch(seen.map((e) => e.target));
       } catch (err) {
-        cards.forEach((el) => el.classList.add('is-in'));
+        pending.forEach((el) => revealNow(el));
         io.disconnect();
       }
     }, { threshold: 0.15, rootMargin: '0px 0px -5% 0px' });
-    cards.forEach((el) => io.observe(el));
+    pending.forEach((el) => io.observe(el));
     // 最後の砦: observer が一度も動かなくても、画面内のカードは隠れたままにしない
     setTimeout(() => {
       try {
         const vh = window.innerHeight || document.documentElement.clientHeight;
-        cards.forEach((el) => {
+        pending.forEach((el) => {
           if (el.classList.contains('will-reveal') && !el.classList.contains('is-in') && isInViewport(el.getBoundingClientRect(), vh)) {
             revealCard(el);
           }
         });
       } catch (err) {
-        cards.forEach((el) => el.classList.add('is-in'));
+        pending.forEach((el) => revealNow(el));
       }
     }, 4000);
   } catch (e) {
-    cards.forEach((el) => el.classList.remove('will-reveal'));
+    pending.forEach((el) => el.classList.remove('will-reveal'));
+  }
+}
+
+export async function init() {
+  const grid = document.getElementById('grid');
+  const links = document.getElementById('links');
+  grid.innerHTML = '<p class="empty">読み込み中…</p>';
+  const boot = document.getElementById('boot');
+  const visited = readVisited();
+  const bp = bootPlan({ visited, reducedMotion: wantsReducedMotion() });
+  const instant = shouldRevealNow(window); // 動きを減らす設定／IntersectionObserver が無い: 演出なしで全部見せる
+  const useBoot = !!boot && bp.show && !instant;
+  if (boot) {
+    if (useBoot) boot.hidden = false;
+    else boot.remove();
+  }
+
+  let r;
+  try {
+    r = { ok: true, v: await loadTools() };
+  } catch (e) {
+    r = { ok: false };
+  }
+  if (!r.ok) {
+    if (boot) boot.remove();
+    grid.innerHTML = '<p role="alert">読み込めませんでした</p>';
+    links.innerHTML = '';
+    return;
+  }
+  const { data, tools } = r.v;
+  let cards = [];
+  let safety = null;
+  try {
+    if (tools.length === 0) {
+      grid.innerHTML = '<p class="empty">ツールがありません</p>';
+    } else {
+      grid.innerHTML = renderGroups(groupTools(tools, data.groups));
+    }
+    links.innerHTML = cleanLinks(data).map((l) => renderLink(l)).join('');
+
+    cards = Array.from(document.querySelectorAll('#grid .card, #links .card'));
+    if (!instant) cards.forEach((el) => el.classList.add('will-reveal'));
+    if (useBoot && cards.length > 0) {
+      // 保険: 演出の想定終了（totalMs）＋余裕のあとも終わっていなければ、強制的に終える
+      safety = setTimeout(() => { if (activeIntroEnd) activeIntroEnd('error'); }, bp.totalMs + 4000);
+      await runIntro(boot, cards, bp.totalMs, visited);
+    } else if (boot) {
+      boot.remove();
+    }
+    markVisited();
+    if (!instant && cards.length > 0) setupReveal(cards);
+  } catch (e) {
+    // どこで失敗しても、全カードが見える・#boot が無い状態にする
+    forceAllVisible(boot, cards);
+    if (cards.length === 0) grid.innerHTML = '<p role="alert">読み込めませんでした</p>';
+    markVisited();
+  } finally {
+    if (safety) clearTimeout(safety);
   }
 }
 

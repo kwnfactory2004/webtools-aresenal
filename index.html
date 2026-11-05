@@ -16,10 +16,15 @@
 <body>
   <div class="deco" aria-hidden="true"></div>
   <noscript><p class="noscript">このページはJavaScriptをオンにすると表示されます</p></noscript>
-  <div id="boot" aria-hidden="true" hidden>
-    <div class="boot-ring"></div>
-    <p class="boot-text">INITIALIZING...</p>
-    <p class="boot-skip">CLICK / ENTER TO SKIP</p>
+  <canvas id="swarm" class="swarm-canvas" aria-hidden="true" hidden></canvas>
+  <div id="boot" hidden>
+    <div class="boot-panel">
+      <div class="boot-ring" aria-hidden="true"></div>
+      <div class="boot-lines">
+        <p class="boot-text" aria-hidden="true">INITIALIZING...</p>
+        <button type="button" class="boot-skip" id="boot-skip" hidden aria-label="起動アニメーションをスキップ">CLICK / ENTER TO SKIP</button>
+      </div>
+    </div>
   </div>
   <header class="site-header">
     <img class="site-logo" src="logo.png" alt="KWN FACTORY. ロゴ" width="56" height="56">
