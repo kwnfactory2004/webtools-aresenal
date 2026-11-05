@@ -33,6 +33,7 @@ body {
 }
 .site-brand { margin: 0; font-size: 12px; color: var(--glow); }
 .site-title { margin: 0; font-size: 24px; line-height: 1.2; }
+.site-title:focus { outline: none; }
 
 .tool-grid, #links { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 #links { margin-top: 16px; }
@@ -96,22 +97,53 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 /* ---- 起動アニメーション ---- */
+/* 画面は透明にして、ページ（マス目と空のカード枠）と群れが見えるようにする。文字は下部中央の小さなHUDパネル */
+.swarm-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 90; }
 #boot {
-  position: fixed; inset: 0; z-index: 100;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-  background: var(--bg); color: var(--glow); cursor: pointer;
+  position: fixed; inset: 0; z-index: 100; pointer-events: none;
+  color: var(--glow);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  transition: opacity .2s;
+  transition: opacity var(--boot-fade, 200ms) linear;
 }
 #boot[hidden] { display: none; }
-#boot.is-leaving { opacity: 0; pointer-events: none; }
+#boot.is-leaving { opacity: 0; }
+.boot-panel {
+  position: absolute; left: 50%; bottom: max(20px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px;
+  width: max-content; max-width: calc(100vw - 24px);
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 56, 44, 0.4);
+  box-shadow: 0 2px 10px rgba(15, 56, 44, 0.12);
+  pointer-events: auto; cursor: pointer;
+}
+.boot-panel::before, .boot-panel::after {
+  content: ""; position: absolute; left: -1px; right: -1px; height: 8px; pointer-events: none;
+  --c: var(--glow);
+  background:
+    linear-gradient(var(--c), var(--c)) left 0 top 0 / 8px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) left 0 top 0 / 2px 8px no-repeat,
+    linear-gradient(var(--c), var(--c)) right 0 top 0 / 8px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) right 0 top 0 / 2px 8px no-repeat;
+}
+.boot-panel::before { top: -1px; }
+.boot-panel::after { bottom: -1px; transform: scaleY(-1); }
 .boot-ring {
-  width: 56px; height: 56px; border-radius: 50%;
-  border: 3px solid rgba(15, 56, 44, 0.15); border-top-color: var(--glow);
+  flex: none; width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid rgba(15, 56, 44, 0.15); border-top-color: var(--glow);
   animation: boot-spin .9s linear infinite;
 }
-.boot-text { margin: 0; font-size: 16px; letter-spacing: .08em; }
-.boot-skip { margin: 0; font-size: 11px; color: var(--muted); }
+.boot-lines { display: flex; flex-direction: column; align-items: flex-start; }
+.boot-text { margin: 0; font-size: 14px; letter-spacing: .08em; line-height: 1.4; white-space: nowrap; }
+.boot-skip {
+  margin: 0; padding: 4px 0; min-height: 32px;
+  font: inherit; font-size: 11px; letter-spacing: .06em; color: var(--muted);
+  background: none; border: 0; cursor: pointer; text-align: left;
+}
+.swarm-canvas[hidden], .boot-skip[hidden] { display: none; }
+.boot-skip:hover { color: var(--glow-hover); }
+.boot-skip:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
 @keyframes boot-spin { to { transform: rotate(360deg); } }
 
 /* カードの登場: 画面に入ると .is-in が付く。下からふわっと出て、四隅ブラケットが伸び、文字が1文字ずつ打ち込まれる */
@@ -119,6 +151,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 0; }
 .card.is-in { animation: card-in .45s ease-out var(--d, 0ms) backwards; }
 .card.is-in::before, .card.is-in::after { animation: bracket-grow .5s ease-out calc(var(--d, 0ms) + 120ms) backwards; }
+.card.no-anim, .card.no-anim::before, .card.no-anim::after { animation: none; } /* スキップ時: ふわっと出さず、すぐ見せる */
 @keyframes card-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes bracket-grow { from { height: 0; opacity: 0; } to { height: 14px; opacity: 1; } }
 
@@ -140,7 +173,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  #boot { display: none; }
+  #boot, .swarm-canvas { display: none; }
   .ch { visibility: visible; }
   .ch::after { display: none; }
   .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
@@ -156,7 +189,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
   .ch { visibility: visible; }
   .ch::after, .sr-only { display: none; }
-  #boot { display: none; }
+  #boot, .swarm-canvas { display: none; }
 }
 
 /* ---- 飾り: 十字マークとゆっくり動く点々 ---- */
