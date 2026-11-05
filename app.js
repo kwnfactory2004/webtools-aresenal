@@ -185,8 +185,9 @@ export function typingPlan(texts, { titleMs = 35, bodyMs = 18, maxTotalMs = 1400
 
 export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
-  if (visited) return { show: true, totalMs: 1500 };
-  return { show: true, totalMs: 8000 };
+  // 初回も2回目以降も、同じ長さのフル演出（visited は互換のため受け取るだけ）
+  void visited;
+  return { show: true, totalMs: 10000 };
 }
 
 // 起動の文字の段階。INITIALIZING 15% / LOADING 4段 55% / READY 20% / フェード 10%。
@@ -511,7 +512,7 @@ function runIntro(boot, cards, totalMs, visited) {
     const byId = new Map();
     if (useCanvas) {
       try {
-        const count = visited ? 16 : swarmCount({ w: vw, h: vh });
+        const count = swarmCount({ w: vw, h: vh });
         const picked = visibleCardsInOrder(cards).slice(0, Math.max(1, Math.floor(count / 4)));
         const targets = picked.map((el, i) => {
           const id = 'card-' + i;
