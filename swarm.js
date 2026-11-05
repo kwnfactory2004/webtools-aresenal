@@ -1,27 +1,50 @@
-// Web Tools Arsenal - 「大量のAIカーソルがページを組み立てる」演出
-// 計画づくり（buildSwarmPlan / positionAt など）は DOM に触らない純粋な関数。node でテストできる。
+// Web Tools Arsenal - 「AIカーソルがページを組み立てる」演出（設計図 → 中身の2段階）
+// 流れ: ①中央でカーソルが渦を巻く（SCANNING PAGE...） ②部品ごとに設計図の四角が広がる（BUILDING LAYOUT）
+//       ③赤い縦線が左→右へ通り、通った所から中身が埋まる（FILLING CONTENT） ④散って終わる（READY）
+// 計画づくり（buildSwarmPlan / positionAt / boxAt / lineX / statusAt など）は DOM に触らない純粋な関数。node でテストできる。
 // 描画（drawFrame）と時計つきループ（runSwarm）だけがブラウザ（Canvas 2D）を使う。
 
 // ---- 時間の配分（totalMs に対する割合）----
-// 出現 0〜18.75% / 組み立て（カード登場）22.5〜55% / 仕上げ（掃く→散る）70〜96% / 残りは余韻
 export const PHASE = {
-  spawnEnd: 0.1875,
-  reveal0: 0.225,
-  reveal1: 0.55,
-  finish: 0.70, // 起動の READY と合わせる（app.js の bootStage と同じ割合）
-  sweep: 0.12,
-  exit: 0.14,
+  scanEnd: 0.17, // 0〜17%: 中央の渦（SCANNING PAGE...）
+  scoutSpawnEnd: 0.09, // 渦のカーソル（約8個）がこの時刻までに出そろう
+  layout1: 0.46, // 17〜46%: 設計図の四角が順に広がる（BUILDING LAYOUT）
+  agentsFull: 0.40, // エージェント数がこの時刻に最終の数になる
+  fill0: 0.46, // 46%〜: 赤い前線が左から右へ（FILLING CONTENT）
+  lineEnd: 0.75, // 前線が右端に着く
+  rowShift: 0.02, // 同じ列の帯は行ごとに約70msずらす（最大このぶん＝7秒で140ms。線が通ってから出るまでの遅れを短く）
+  rowStepMs: 70,
+  ready: 0.86, // 86%〜: READY（補助線・カーソルが消える）
+  leave: 0.93, // 状態バーがフェードアウトを始める
+  fade: 0.09, // 中身が出てから設計図の四角が消えるまで
+  fill: 0.05, // 1つの部品の「レイヤー数」が加算され終わるまで
+  exit: 0.08, // カーソルが画面の外へ散る時間
+  leaveJitter: 0.04,
 };
+// スクロールで入ったカード用の短い版（赤い線・渦なし）
+export const MINI = { layout0: 0.22, layout1: 0.62, reveal: 0.06, ready: 0.72, fade: 0.25, exit: 0.16, leaveJitter: 0.05 };
 
-const COLOR_DARK = '#0F382C';
-const COLOR_LIGHT = '#1F6B52';
-const FLASH_MS = 300;
-const TRAIL_SAMPLES = 12;
-const TRAIL_STEP_MS = 26;
+export const STAGE_TEXT = { scan: 'SCANNING PAGE...', layout: 'BUILDING LAYOUT', fill: 'FILLING CONTENT', ready: 'READY' };
+export const AGENT_COLORS = ['#0F382C', '#0E9AA7', '#2F6FDE', '#D6467F', '#7B55D9'];
+
+const BASE_MS = 7000;
+const SCOUTS = 8;
+const START_BOX = 24; // 設計図の四角は、左上の約24×24から広がる
+const TYPE_START_MS = 150; // app.js の打ち込み開始の遅れと同じ
+const TRAIL_SAMPLES = 6;
+const TRAIL_STEP_MS = 12;
+const TRAIL_MAX_PX = 48; // 軌跡は短く（速く動いても約48pxまで）
 const FADE_IN_MS = 160;
+const GREEN = [31, 107, 82]; // #1F6B52
+const DEEP = [15, 56, 44]; // #0F382C
+const RED = [229, 72, 77]; // #E5484D
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const pad2 = (n) => String(n).padStart(2, '0');
+const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + clamp(a, 0, 1).toFixed(3) + ')';
+const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const AGENT_RGB = AGENT_COLORS.map(hexRgb);
+const snap = (v) => Math.round(v) + 0.5;
 
 // 決まった種から、いつも同じ並びの 0以上1未満の数を出す乱数
 export function mulberry32(seed) {
@@ -39,12 +62,12 @@ export function easeInOutCubic(u) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
 
-// 画面の広さに比例したカーソルの数（最小16・最大64）。PC（幅900以上）で約48、スマホで約24。
+// 画面の広さに比例したエージェント（カーソル）の数（最小10・最大40）。PC 1440×900 で36、スマホ 390×844 で18。
 export function swarmCount(view) {
   const w = Math.max(0, Number(view && view.w) || 0);
   const h = Math.max(0, Number(view && view.h) || 0);
-  const per = w >= 900 ? 27000 : 13700;
-  return clamp(Math.round((w * h) / per), 16, 64);
+  const per = w >= 900 ? 36000 : 18000;
+  return clamp(Math.round((w * h) / per), 10, 40);
 }
 
 // 重いとき（直近の平均が24msを超えた）は約30%減らす。minCount より下には減らさない
@@ -71,225 +94,400 @@ export function adaptStep({ frames = [], count, tMs, lastAdaptMs = -Infinity, mi
   return { frames: recent, count, lastAdaptMs };
 }
 
-// これより少なくは描かない数。四隅担当（カードの枠を立ち上げる役）は最後まで残す
-export function essentialCount(plan, minCount = 16) {
-  const corners = plan.cursors.filter((c) => c.role === 'corner').length;
-  return Math.min(plan.cursors.length, Math.max(minCount, corners));
+// これより少なくは描かないカーソルの数（渦のカーソル約8個）。設計図の四角はカーソルと別に描くので、間引いても消えない
+export function essentialCount(plan, minCount = SCOUTS) {
+  const n = plan && Array.isArray(plan.cursors) ? plan.cursors.length : 0;
+  return Math.min(n, Math.max(0, Math.floor(Number(minCount)) || 0));
+}
+
+// 渦の位置（中央のまわりを回る。半径はゆっくり伸び縮み）
+function swirlPos(s, t) {
+  const ang = s.a0 + s.omega * t;
+  const r = s.r * (1 + 0.22 * Math.sin(t * s.wob + s.ph));
+  return { x: s.cx + Math.cos(ang) * r, y: s.cy + Math.sin(ang) * r * 0.82 };
+}
+
+// 赤い前線が x を通る時刻
+function lineTimeAt(T, W, x) {
+  return T * (PHASE.fill0 + (PHASE.lineEnd - PHASE.fill0) * clamp(x / W, 0, 1));
 }
 
 // ---- 計画づくり ----
-// targets: [{ id, rect:{x,y,w,h}, title?:{x,y,w,h}, descEnd?:{x,y}, typing?:{titleMs,totalMs} }]（カードの表示順）
-// 戻り値: { seed, totalMs, viewport, scan, finishAt, cursors, reveals }
-export function buildSwarmPlan({ targets = [], count = 48, totalMs = 8000, seed = 1, viewport, scan = true } = {}) {
-  const T = Math.max(300, Number(totalMs) || 8000);
+// targets: [{ id, kind?:'card'|'label', rect:{x,y,w,h}, parts?:[{x,y,w,h}], title?:{x,y,w,h}, body?:[{x,y,w,h}],
+//             descEnd?:{x,y}, typing?:{titleMs,totalMs} }]（表示順）
+// scan=true: 起動のフル版（渦・赤い前線あり）。scan=false: スクロール登場の短い版。
+// 戻り値: { seed, totalMs, viewport, scan, readyAt, lineStart, lineEnd, boxes, cursors, reveals }
+export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, seed = 1, viewport, scan = true } = {}) {
+  const T = Math.max(300, Number(totalMs) || BASE_MS);
   const W = Math.max(100, Number(viewport && viewport.w) || 1280);
   const H = Math.max(100, Number(viewport && viewport.h) || 800);
+  const isScan = !!scan;
   const list = (Array.isArray(targets) ? targets : []).filter((t) => {
     const r = t && t.rect;
     return r && [r.x, r.y, r.w, r.h].every((v) => Number.isFinite(v));
   });
   const n = list.length;
   const rnd = mulberry32(seed);
-  const scale = clamp(T / 8000, 0.3, 1);
-  const total = Math.max(Math.floor(Number(count)) || 0, n * 4);
-  const typistN = Math.min(n, Math.max(0, total - n * 4));
-  const finishAt = T * PHASE.finish;
-  const cap = finishAt - 20;
-
+  const scale = clamp(T / BASE_MS, 0.12, 1);
+  const N = Math.max(0, Math.floor(Number(count)) || 0);
   const cx = W / 2;
   const cy = H / 2;
-  const inView = (p, m = 6) => ({ x: clamp(p.x, m, W - m), y: clamp(p.y, m, H - m) });
+  const inView = (p, m = 4) => ({ x: clamp(p.x, m, W - m), y: clamp(p.y, m, H - m) });
+  const finiteBox = (r) => r && [r.x, r.y, r.w, r.h].every((v) => Number.isFinite(v));
 
-  const spawnPoint = () => {
-    const edge = Math.floor(rnd() * 4);
-    if (edge === 0) return { x: rnd() * W, y: -14 };
-    if (edge === 1) return { x: W + 14, y: rnd() * H };
-    if (edge === 2) return { x: rnd() * W, y: H + 14 };
-    return { x: -14, y: rnd() * H };
-  };
+  const L0 = (isScan ? PHASE.scanEnd : MINI.layout0) * T;
+  const L1 = (isScan ? PHASE.layout1 : MINI.layout1) * T;
+  const grow = isScan ? Math.min(450, 0.07 * T) : Math.min(320, 0.3 * T);
+  const readyAt = (isScan ? PHASE.ready : MINI.ready) * T;
+  const lineStart = PHASE.fill0 * T;
+  const lineEnd = PHASE.lineEnd * T;
 
-  // 時刻が昇順（同時刻は可）で、capを超えないように整える
-  const tidy = (pts) => {
-    let prev = 0;
-    const out = pts.map((p) => {
-      const t = Math.max(prev, Math.max(0, p.t));
-      prev = t;
-      return { ...p, t };
-    });
-    for (let k = out.length - 1; k >= 0; k--) {
-      const lim = cap - (out.length - 1 - k) * 4;
-      if (out[k].t > lim) out[k].t = Math.max(0, lim);
+  // 同じ列（左端の x がほぼ同じ）の中での行の番号。同じ列の部品は、上の行から少しずつ遅れて埋まる。
+  // 1行あたり約70ms。ただし列の行が多いときは、合計が rowShift（0.02T）に収まるように間隔を詰める
+  const sameCol = (a, b) => Math.abs(a.rect.x - b.rect.x) <= 12;
+  const rowOf = list.map((tg, i) => list.filter((o, j) => j !== i && sameCol(o, tg)
+    && (o.rect.y < tg.rect.y - 8 || (Math.abs(o.rect.y - tg.rect.y) <= 8 && j < i))).length);
+  const rowStep = list.map((tg) => {
+    const rows = list.filter((o) => sameCol(o, tg)).length;
+    return Math.min(PHASE.rowStepMs * scale, (PHASE.rowShift * T) / Math.max(1, rows - 1));
+  });
+
+  // 1) 設計図の四角（表示順に広がり、前線が通ったら中身が埋まって消える）
+  const span = Math.max(0, L1 - L0 - grow);
+  const boxes = list.map((tg, i) => {
+    const r = { x: tg.rect.x, y: tg.rect.y, w: Math.max(0, tg.rect.w), h: Math.max(0, tg.rect.h) };
+    const appearAt = L0 + (n > 1 ? (span * i) / (n - 1) : 0);
+    const growEnd = appearAt + grow;
+    const revealAt = isScan
+      ? Math.max(growEnd, lineTimeAt(T, W, r.x) + Math.min(rowOf[i] * rowStep[i], PHASE.rowShift * T))
+      : growEnd + MINI.reveal * T;
+    const fadeEnd = Math.max(revealAt + 1, Math.min(revealAt + (isScan ? PHASE.fade : MINI.fade) * T, 0.95 * T));
+    const kind = tg.kind === 'label' ? 'label' : 'card';
+    const parts = (Array.isArray(tg.parts) ? tg.parts : []).filter(finiteBox).map((p, k) => {
+      const a = growEnd + k * 70 * scale;
+      return { rect: { x: p.x, y: p.y, w: Math.max(0, p.w), h: Math.max(0, p.h) }, appearAt: a, growEnd: a + 180 * scale };
+    }).filter((p) => p.appearAt < revealAt);
+    const box = {
+      id: tg.id,
+      kind,
+      rect: r,
+      appearAt,
+      growEnd,
+      revealAt,
+      fadeEnd,
+      redMs: isScan ? 300 * scale : 0,
+      fillMs: Math.max(1, Math.min(PHASE.fill * T, readyAt - revealAt)),
+      layers: kind === 'card' ? 8 : 3,
+      parts,
+    };
+    if (finiteBox(tg.title)) box.title = { ...tg.title };
+    if (Array.isArray(tg.body)) box.body = tg.body.filter(finiteBox).map((b) => ({ ...b }));
+    if (tg.typing && Number.isFinite(tg.typing.totalMs)) {
+      box.typing = { startMs: TYPE_START_MS, titleMs: Math.max(0, Number(tg.typing.titleMs) || 0), totalMs: Math.max(0, tg.typing.totalMs) };
     }
-    return out;
-  };
+    if (tg.descEnd && Number.isFinite(tg.descEnd.x) && Number.isFinite(tg.descEnd.y)) box.descEnd = { x: tg.descEnd.x, y: tg.descEnd.y };
+    return box;
+  });
 
-  // spawn から holds（決まった場所・時刻）まで、画面の中をうろうろしてから向かう道すじ
-  const route = (spawnAt, holds, anchor) => {
-    const t0 = holds[0].t;
-    const avail = t0 - spawnAt;
-    const wps = [];
-    if (avail >= 0.3 * T) {
-      const flight = Math.min(avail * 0.45, 0.12 * T * (0.8 + 0.5 * rnd()));
-      const span = avail - flight;
-      const nW = clamp(Math.floor(span / (0.16 * T)), 1, 6);
-      for (let k = 0; k < nW; k++) {
-        const w = 0.2 + 0.6 * ((k + 1) / nW);
-        const rp = { x: 12 + rnd() * (W - 24), y: 12 + rnd() * (H - 24) };
-        const p = inView({ x: rp.x + (anchor.x - rp.x) * w, y: rp.y + (anchor.y - rp.y) * w }, 8);
-        wps.push({ x: p.x, y: p.y, t: spawnAt + (span * (k + 1)) / nW });
+  // 2) カーソル（先頭の約8個が渦のカーソル。残りは BUILDING LAYOUT の間に順に増える）
+  const speed = 1.1 / Math.max(scale, 0.45); // px / ms（短い版でも速くなりすぎない）
+  const minHop = 160 * scale;
+  // 遠い移動ほど速く（200px→1倍、600px以上→約2.3倍）。渦から画面の端の四角へも、広がりの途中で追いつける
+  const travel = (a, b) => {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    return Math.max(minHop, d / (speed * (1 + 1.3 * clamp((d - 200) / 400, 0, 1))));
+  };
+  const scouts = isScan ? Math.min(SCOUTS, N) : 0;
+  const st = [];
+  for (let i = 0; i < N; i++) {
+    let spawnAt;
+    let spawn;
+    let swirl = null;
+    let start;
+    if (i < scouts) {
+      spawnAt = (PHASE.scoutSpawnEnd * T * (i + 1)) / scouts;
+      swirl = {
+        cx, cy,
+        r: 16 + 46 * rnd(),
+        a0: rnd() * Math.PI * 2,
+        omega: ((Math.PI * 2) / 1300) * (0.75 + 0.5 * rnd()),
+        wob: 0.004 + 0.004 * rnd(),
+        ph: rnd() * Math.PI * 2,
+        end: 0,
+      };
+      // SCANNING PAGE... の表示が終わる（0.17T）まで渦を続け、そのあと外へばらける
+      swirl.end = Math.max(spawnAt + 40 * scale, T * (PHASE.scanEnd + 0.005 * rnd()));
+      spawn = swirlPos(swirl, spawnAt);
+      const p = swirlPos(swirl, swirl.end);
+      start = { x: p.x, y: p.y, t: swirl.end };
+    } else if (isScan) {
+      const rest = N - scouts;
+      spawnAt = L0 + ((PHASE.agentsFull * T - L0) * (i - scouts + 1)) / rest;
+      spawn = { x: cx + (rnd() - 0.5) * 30, y: cy + (rnd() - 0.5) * 30 };
+      start = { x: spawn.x, y: spawn.y, t: spawnAt };
+    } else {
+      // 短い版: 対象のカードに一番近い画面の端の外から入ってくる
+      spawnAt = rnd() * 0.06 * T;
+      const r = n > 0 ? boxes[i % n].rect : { x: cx, y: cy, w: 0, h: 0 };
+      const mx = clamp(r.x + r.w * rnd(), 0, W);
+      const my = clamp(r.y + r.h * rnd(), 0, H);
+      const d = [my, W - mx, H - my, mx];
+      const e = d.indexOf(Math.min(...d));
+      spawn = e === 0 ? { x: mx, y: -14 } : e === 1 ? { x: W + 14, y: my } : e === 2 ? { x: mx, y: H + 14 } : { x: -14, y: my };
+      start = { x: spawn.x, y: spawn.y, t: spawnAt };
+    }
+    st.push({ spawnAt, spawn, swirl, start, pos: { x: start.x, y: start.y }, freeAt: start.t, keys: [], used: 0 });
+  }
+
+  // 空いている時間に、四角のハンドルのまわりや画面の中をうろうろする
+  const wanderPoint = (tNow) => {
+    const ready = boxes.filter((b) => b.appearAt <= tNow && b.fadeEnd > tNow);
+    if (ready.length && rnd() < 0.8) {
+      const r = ready[Math.floor(rnd() * ready.length)].rect;
+      const hx = [r.x, r.x + r.w / 2, r.x + r.w][Math.floor(rnd() * 3)];
+      const hy = [r.y, r.y + r.h / 2, r.y + r.h][Math.floor(rnd() * 3)];
+      return inView({ x: hx + (rnd() - 0.5) * 36, y: hy + (rnd() - 0.5) * 36 }, 8);
+    }
+    return { x: 16 + rnd() * (W - 32), y: 16 + rnd() * (H - 32) };
+  };
+  const wanderUntil = (s, at, next) => {
+    for (let guard = 0; guard < 40; guard++) {
+      if (at - s.freeAt - travel(s.pos, next) < 650 * scale) return;
+      const wp = wanderPoint(s.freeAt + 300 * scale);
+      const tw = s.freeAt + Math.max(travel(s.pos, wp), (380 + 320 * rnd()) * scale);
+      if (tw + travel(wp, next) > at) return;
+      s.keys.push({ x: wp.x, y: wp.y, t: tw });
+      s.pos = wp;
+      s.freeAt = tw;
+      const pause = (120 + 220 * rnd()) * scale;
+      if (s.freeAt + pause + travel(wp, next) <= at) {
+        s.freeAt += pause;
+        s.keys.push({ x: wp.x, y: wp.y, t: s.freeAt });
       }
     }
-    return tidy(wps.concat(holds));
+  };
+  const pick = (pos, at, avoid) => {
+    let best = -1;
+    let bestScore = Infinity;
+    st.forEach((s, j) => {
+      if (avoid && avoid.has(j)) return;
+      if (s.spawnAt > at - minHop) return;
+      if (s.freeAt + travel(s.pos, pos) > at) return;
+      const score = Math.hypot(s.pos.x - pos.x, s.pos.y - pos.y) + s.used * 60 + rnd() * 30;
+      if (score < bestScore) { bestScore = score; best = j; }
+    });
+    return best;
+  };
+  const go = (j, pos, at, drag) => {
+    const s = st[j];
+    wanderUntil(s, at, pos);
+    s.keys.push({ x: pos.x, y: pos.y, t: at, ...(drag ? { drag } : {}) });
+    s.pos = { x: pos.x, y: pos.y };
+    s.freeAt = at;
+  };
+  const hold = (j, ms) => {
+    const s = st[j];
+    s.freeAt += Math.max(0, ms);
+    s.keys.push({ x: s.pos.x, y: s.pos.y, t: s.freeAt });
   };
 
-  // cursors の並びは「全カードの四隅担当 → 打ち込み担当 → 浮遊担当」。重いときは後ろから間引くので、
-  // 浮遊・打ち込みから先に消え、四隅担当は最後まで残る（drawFrame は先頭から drawCount 個を描く）。
-  const cursors = [];
-  let serial = 0;
-  const push = ({ role, cardId, anchor, holds, aim, flashAt }) => {
-    serial += 1;
-    const spawn = spawnPoint();
-    const t0 = holds[0].t;
-    const spawnAt = Math.min(rnd() * PHASE.spawnEnd * T, Math.max(0, t0 - 120 * scale));
-    const waypoints = route(spawnAt, holds, anchor);
-    const last = waypoints[waypoints.length - 1];
+  // 2a) 四角を広げる係: 右下のハンドルをつかんで一緒に動く。手伝い係がほかのハンドルのそばに来る
+  boxes.forEach((b) => {
+    const r = b.rect;
+    const p0 = inView({ x: r.x + Math.min(START_BOX, r.w), y: r.y + Math.min(START_BOX, r.h) });
+    const p1 = inView({ x: r.x + r.w, y: r.y + r.h });
+    const used = new Set();
+    // 間に合わないときは、広がっている途中のハンドルに追いついて、そこから一緒に動く
+    const drag = { t0: b.appearAt, x0: p0.x, y0: p0.y };
+    for (const f of [0, 0.3, 0.55, 0.8]) {
+      const tj = b.appearAt + f * (b.growEnd - b.appearAt);
+      const e = easeInOutCubic(f);
+      const pj = { x: p0.x + (p1.x - p0.x) * e, y: p0.y + (p1.y - p0.y) * e };
+      const g = pick(pj, tj, used);
+      if (g < 0) continue;
+      used.add(g);
+      st[g].used += 1;
+      go(g, pj, tj);
+      go(g, p1, b.growEnd, drag);
+      hold(g, 120 * scale);
+      break;
+    }
+    const helpers = isScan ? (rnd() < 0.7 ? 1 : 0) : 2;
+    for (let k = 0; k < helpers; k++) {
+      let pos;
+      let at;
+      if (isScan) {
+        const hx = [r.x, r.x + r.w / 2, r.x + r.w][Math.floor(rnd() * 3)];
+        const hy = [r.y, r.y + r.h][Math.floor(rnd() * 2)];
+        pos = inView({ x: hx, y: hy });
+        at = b.growEnd + rnd() * 150 * scale;
+      } else if (k === 0) {
+        pos = inView({ x: r.x, y: r.y });
+        at = b.appearAt;
+      } else {
+        pos = inView({ x: r.x + r.w, y: r.y });
+        at = b.growEnd;
+      }
+      const j = pick(pos, at, used);
+      if (j < 0) continue;
+      used.add(j);
+      st[j].used += 1;
+      go(j, pos, at);
+      hold(j, isScan ? (250 + 200 * rnd()) * scale : Math.max(100 * scale, b.growEnd + 100 * scale - at));
+    }
+  });
+
+  // 2b) 打ち込み係: 中身が埋まるカードの、文字が打たれる位置の少し先を追う（READY より後にははみ出さない）
+  if (isScan) {
+    boxes
+      .filter((b) => b.kind === 'card' && b.title && b.typing)
+      .sort((a, b) => a.revealAt - b.revealAt)
+      .forEach((b) => {
+        const t0 = b.revealAt + b.typing.startMs;
+        const tTitle = t0 + Math.max(60 * scale, b.typing.titleMs);
+        if (tTitle > readyAt - 100 * scale) return;
+        const p1 = inView({ x: b.title.x + 4, y: b.title.y - 2 });
+        const p2 = inView({ x: b.title.x + b.title.w + 10, y: b.title.y - 2 });
+        const j = pick(p1, t0);
+        if (j < 0) return;
+        st[j].used += 1;
+        go(j, p1, t0);
+        go(j, p2, tTitle);
+        const tDesc = t0 + b.typing.totalMs;
+        if (b.descEnd && tDesc > tTitle + 60 * scale && tDesc <= readyAt - 100 * scale) {
+          go(j, inView({ x: b.descEnd.x + 10, y: b.descEnd.y - 2 }), tDesc);
+        }
+      });
+  }
+
+  // 2c) 最後: READY のあと、中央から外へ散る
+  const exitMs = (isScan ? PHASE.exit : MINI.exit) * T;
+  const jitter = (isScan ? PHASE.leaveJitter : MINI.leaveJitter) * T;
+  const cursors = st.map((s, i) => {
+    let leaveAt = readyAt + rnd() * jitter;
+    leaveAt = Math.max(s.start.t, Math.min(Math.max(leaveAt, s.freeAt), T - exitMs));
+    wanderUntil(s, leaveAt, s.pos);
+    // 時刻が昇順（同時刻は可）で、leaveAt を超えないように整える
+    let prev = s.start.t;
+    const waypoints = s.keys.map((k) => {
+      const t = clamp(Math.max(prev, k.t), prev, leaveAt);
+      prev = t;
+      return { ...k, t };
+    });
+    const last = waypoints.length ? waypoints[waypoints.length - 1] : s.start;
+    waypoints.push({ x: last.x, y: last.y, t: leaveAt });
     const target = { x: last.x, y: last.y };
-    // 仕上げ: 掃き線が通ったら、中心から外へ散る
-    const leaveAt = Math.max(last.t, scan
-      ? finishAt + PHASE.sweep * T * clamp(target.x / W, 0, 1)
-      : finishAt + 0.06 * T * rnd());
-    const exitAt = leaveAt + PHASE.exit * T;
     let dx = target.x - cx;
     let dy = target.y - cy;
     let len = Math.hypot(dx, dy);
     if (len < 1) { const a = rnd() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); len = 1; }
-    const far = 0.35 * Math.max(W, H) + 40;
-    cursors.push({
-      id: 'c' + pad2(serial),
-      label: 'AGENT-' + pad2(serial),
-      role,
-      cardId,
-      spawn,
-      spawnAt,
+    const far = 0.6 * Math.max(W, H) + 40;
+    return {
+      id: 'c' + pad2(i + 1),
+      role: s.swirl ? 'scout' : 'agent',
+      color: AGENT_COLORS[i % AGENT_COLORS.length],
+      colorIndex: i % AGENT_COLORS.length,
+      spawn: s.spawn,
+      spawnAt: s.spawnAt,
+      swirl: s.swirl,
+      start: s.start,
       waypoints,
-      arriveAt: last.t,
       target,
-      aim: aim || target,
-      flashAt: flashAt == null ? last.t : flashAt,
       leaveAt,
-      exitAt,
+      exitAt: leaveAt + exitMs,
       exit: { x: target.x + (dx / len) * far, y: target.y + (dy / len) * far },
-      bend: (rnd() - 0.5) * 0.4,
-    });
-  };
-
-  const stagger = 90 * scale;
-  const revealAt = (i) => T * (PHASE.reveal0 + (n > 1 ? ((PHASE.reveal1 - PHASE.reveal0) * i) / (n - 1) : 0));
-
-  // 1) 四隅担当（左上→右上→右下→左下の順に着く）
-  list.forEach((tg, i) => {
-    const r = tg.rect;
-    const corners = [
-      { x: r.x, y: r.y },
-      { x: r.x + r.w, y: r.y },
-      { x: r.x + r.w, y: r.y + r.h },
-      { x: r.x, y: r.y + r.h },
-    ];
-    corners.forEach((c, j) => {
-      const p = inView(c, 4);
-      push({ role: 'corner', cardId: tg.id, anchor: p, holds: [{ x: p.x, y: p.y, t: revealAt(i) + j * stagger }] });
-    });
+      bend: (rnd() - 0.5) * 0.35,
+    };
   });
 
-  // 2) 打ち込み担当（文字が打たれる位置の少し先を追う。文字の上に居座らない）
-  list.slice(0, typistN).forEach((tg, i) => {
-    const r = tg.rect;
-    const title = tg.title || { x: r.x + 22, y: r.y + 66, w: Math.min(200, Math.max(40, r.w - 44)), h: 24 };
-    const typing = tg.typing || { titleMs: 420, totalMs: 1000 };
-    const R = revealAt(i);
-    const p1 = inView({ x: title.x + 6, y: title.y - 2 }, 4);
-    const p2 = inView({ x: Math.min(title.x + title.w + 10, r.x + r.w - 8), y: title.y - 2 }, 4);
-    const tTitle0 = R + 120;
-    const tTitleEnd = R + 150 + Math.max(60, Number(typing.titleMs) || 0);
-    let holds;
-    if (cap - tTitle0 < 250) {
-      holds = [{ x: p1.x, y: p1.y, t: Math.min(tTitle0, cap) }];
-    } else {
-      holds = [{ x: p1.x, y: p1.y, t: tTitle0 }, { x: p2.x, y: p2.y, t: tTitleEnd }];
-      let tNext = tTitleEnd;
-      if (tg.descEnd && Number.isFinite(tg.descEnd.x) && Number.isFinite(tg.descEnd.y)) {
-        const pd = inView({ x: tg.descEnd.x + 10, y: tg.descEnd.y - 2 }, 4);
-        tNext = Math.max(tTitleEnd + 60, R + 150 + (Number(typing.totalMs) || 0));
-        holds.push({ x: pd.x, y: pd.y, t: tNext });
-      }
-      const park = inView({ x: r.x + 14, y: r.y + r.h - 18 }, 4);
-      holds.push({ x: park.x, y: park.y, t: tNext + 400 });
-    }
-    push({ role: 'typist', cardId: tg.id, anchor: p1, holds: tidy(holds), aim: p1, flashAt: tidy(holds)[0].t });
-  });
+  const reveals = boxes
+    .map((b) => ({ cardId: b.id, kind: b.kind, atMs: b.revealAt }))
+    .sort((a, b) => a.atMs - b.atMs);
 
-  // 3) 浮遊担当（カードのすき間をうろうろして、最後に端に止まる）
-  const floaters = total - n * 4 - typistN;
-  for (let k = 0; k < floaters; k++) {
-    let p;
-    if (n > 0) {
-      const r = list[Math.floor(rnd() * n)].rect;
-      const side = Math.floor(rnd() * 4);
-      if (side === 0) p = { x: r.x + rnd() * r.w, y: r.y - 10 };
-      else if (side === 1) p = { x: r.x + r.w + 10, y: r.y + rnd() * r.h };
-      else if (side === 2) p = { x: r.x + rnd() * r.w, y: r.y + r.h + 10 };
-      else p = { x: r.x - 10, y: r.y + rnd() * r.h };
-    } else {
-      p = { x: 12 + rnd() * (W - 24), y: 12 + rnd() * (H - 24) };
-    }
-    p = inView(p, 4);
-    push({ role: 'float', cardId: null, anchor: p, holds: [{ x: p.x, y: p.y, t: T * (0.3 + 0.3 * rnd()) }] });
-  }
-
-  const reveals = list.map((tg) => {
-    const own = cursors.filter((c) => c.cardId === tg.id && c.role === 'corner');
-    return { cardId: tg.id, atMs: Math.min(...own.map((c) => c.arriveAt)) };
-  });
-
-  return { seed, totalMs: T, viewport: { w: W, h: H }, scan: !!scan, finishAt, cursors, reveals };
+  return { seed, totalMs: T, viewport: { w: W, h: H }, scan: isScan, readyAt, lineStart, lineEnd, boxes, cursors, reveals };
 }
 
-// ---- 位置 ----
+// ---- 位置・形 ----
+// 赤い前線の x（0〜画面の幅。時間とともに増えるだけ）
+export function lineX(plan, tMs) {
+  if (!plan || typeof plan !== 'object') return 0; // null / undefined / NaN などでも落ちない
+  const W = Number(plan.viewport && plan.viewport.w) || 0;
+  const a = Number(plan.lineStart);
+  const b = Number(plan.lineEnd);
+  if (!(W > 0) || !(b > a)) return 0;
+  return W * clamp(((Number(tMs) || 0) - a) / (b - a), 0, 1);
+}
+
+// 時刻 tMs の設計図の四角。見えない時刻は null。
+// 戻り値: { x, y, w, h, a（輪郭の濃さ 0..1）, fillA（塗りの濃さ）, red（赤い縁の強さ）, u（広がり 0..1） }
+export function boxAt(b, tMs) {
+  const t = Number(tMs) || 0;
+  if (!b || t < b.appearAt || t >= b.fadeEnd) return null;
+  const r = b.rect;
+  const w0 = Math.min(START_BOX, r.w);
+  const h0 = Math.min(START_BOX, r.h);
+  const u = b.growEnd > b.appearAt ? easeInOutCubic((t - b.appearAt) / (b.growEnd - b.appearAt)) : 1;
+  let a = Math.min(1, 0.35 + (t - b.appearAt) / 90);
+  let fillA = 1;
+  let red = 0;
+  if (t >= b.revealAt) {
+    const v = clamp((t - b.revealAt) / (b.fadeEnd - b.revealAt), 0, 1);
+    a *= Math.pow(1 - v, 1.4);
+    fillA = Math.pow(1 - v, 3);
+    red = b.redMs > 0 ? clamp(1 - (t - b.revealAt) / b.redMs, 0, 1) : 0;
+  }
+  return { x: r.x, y: r.y, w: w0 + (r.w - w0) * u, h: h0 + (r.h - h0) * u, a, fillA, red, u };
+}
+
 function nodesOf(c) {
   return [
-    { x: c.spawn.x, y: c.spawn.y, t: c.spawnAt },
+    { x: c.start.x, y: c.start.y, t: c.start.t },
     ...c.waypoints,
-    { x: c.target.x, y: c.target.y, t: c.leaveAt },
     { x: c.exit.x, y: c.exit.y, t: c.exitAt },
   ];
 }
 
-// 時刻 tMs のカーソルの位置と濃さ。spawn → waypoints → target（到着後は止まる）→ 散る位置
+// 時刻 tMs のカーソルの位置と濃さ。渦（あれば）→ 道すじ（drag の区間は四角の角と同じ動き）→ 散る位置
 export function positionAt(c, tMs) {
-  const nodes = nodesOf(c);
   const t = Number(tMs) || 0;
   let x;
   let y;
-  if (t <= nodes[0].t) {
-    x = nodes[0].x; y = nodes[0].y;
-  } else if (t >= nodes[nodes.length - 1].t) {
-    const e = nodes[nodes.length - 1];
-    x = e.x; y = e.y;
+  if (c.swirl && t < c.swirl.end) {
+    const p = swirlPos(c.swirl, Math.max(t, c.spawnAt));
+    x = p.x; y = p.y;
   } else {
-    let k = 0;
-    while (k < nodes.length - 2 && t >= nodes[k + 1].t) k++;
-    const a = nodes[k];
-    const b = nodes[k + 1];
-    const span = b.t - a.t;
-    const e = span > 0 ? easeInOutCubic((t - a.t) / span) : 1;
-    x = a.x + (b.x - a.x) * e;
-    y = a.y + (b.y - a.y) * e;
-    const dist = Math.hypot(b.x - a.x, b.y - a.y);
-    if (dist > 40) {
-      // 直線ではなく、ゆるく弧を描く（端では 0）
-      const bump = Math.sin(Math.PI * e) * (c.bend || 0) * dist;
-      x += (-(b.y - a.y) / dist) * bump;
-      y += ((b.x - a.x) / dist) * bump;
+    const nodes = nodesOf(c);
+    if (t <= nodes[0].t) {
+      x = nodes[0].x; y = nodes[0].y;
+    } else if (t >= nodes[nodes.length - 1].t) {
+      const e = nodes[nodes.length - 1];
+      x = e.x; y = e.y;
+    } else {
+      let k = 0;
+      while (k < nodes.length - 2 && t >= nodes[k + 1].t) k++;
+      const a = nodes[k];
+      const b = nodes[k + 1];
+      const span = b.t - a.t;
+      // drag の区間は四角の広がりと同じ easing（角のハンドルにぴったり付く）。移動はなめらかな sine（最高速を抑える）
+      const u = span > 0 ? (t - a.t) / span : 1;
+      const d = b.drag;
+      if (d) {
+        // 角をつかんでいる区間: 四角の広がり（d.t0〜b.t）と同じ式。途中から追いついた場合も、ぴったり重なる
+        const e = b.t > d.t0 ? easeInOutCubic((t - d.t0) / (b.t - d.t0)) : 1;
+        x = d.x0 + (b.x - d.x0) * e;
+        y = d.y0 + (b.y - d.y0) * e;
+      } else {
+        const e = (1 - Math.cos(Math.PI * clamp(u, 0, 1))) / 2;
+        x = a.x + (b.x - a.x) * e;
+        y = a.y + (b.y - a.y) * e;
+        const dist = Math.hypot(b.x - a.x, b.y - a.y);
+        if (dist > 40) {
+          // 直線ではなく、ゆるく弧を描く（端では 0）
+          const bump = Math.sin(Math.PI * e) * (c.bend || 0) * dist;
+          x += (-(b.y - a.y) / dist) * bump;
+          y += ((b.x - a.x) / dist) * bump;
+        }
+      }
     }
   }
   const fadeIn = clamp((t - c.spawnAt) / FADE_IN_MS, 0, 1);
@@ -298,62 +496,240 @@ export function positionAt(c, tMs) {
   return { x, y, alpha: Math.min(fadeIn, fadeOut) };
 }
 
+// 状態バーの中身（エージェント数・完成レイヤー数は時間とともに増えるだけ）
+export function stageOf(p) {
+  if (p < PHASE.scanEnd) return 'scan';
+  if (p < PHASE.fill0) return 'layout';
+  if (p < PHASE.ready) return 'fill';
+  return 'ready';
+}
+export function statusAt(plan, tMs) {
+  const T = (plan && plan.totalMs) || 0;
+  const t = clamp(Number(tMs) || 0, 0, T);
+  const stage = T > 0 ? stageOf(t / T) : 'ready';
+  const cursors = (plan && Array.isArray(plan.cursors)) ? plan.cursors : [];
+  const boxes = (plan && Array.isArray(plan.boxes)) ? plan.boxes : [];
+  const spawned = cursors.filter((c) => c.spawnAt <= t);
+  let layers = 0;
+  let totalLayers = 0;
+  for (const b of boxes) {
+    const n = b.layers || 0;
+    totalLayers += n;
+    layers += Math.round(n * clamp((t - b.revealAt) / (b.fillMs || 1), 0, 1));
+  }
+  return {
+    stage,
+    text: STAGE_TEXT[stage],
+    agents: spawned.length,
+    layers,
+    totalLayers,
+    colors: spawned.slice(0, 6).map((c) => c.color),
+  };
+}
+
 // ---- 描画 ----
 function arrowPath(ctx) {
+  // 約12pxの小さな矢印
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(0, 15);
-  ctx.lineTo(3.6, 11.8);
-  ctx.lineTo(6.2, 17.6);
-  ctx.lineTo(8.6, 16.6);
-  ctx.lineTo(6.1, 10.9);
-  ctx.lineTo(10.8, 10.9);
+  ctx.lineTo(0, 10.2);
+  ctx.lineTo(2.5, 8);
+  ctx.lineTo(4.3, 12);
+  ctx.lineTo(5.9, 11.3);
+  ctx.lineTo(4.2, 7.4);
+  ctx.lineTo(7.4, 7.4);
   ctx.closePath();
 }
 
+function drawHex(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = Math.PI / 6 + (k * Math.PI) / 3;
+    const px = x + Math.cos(a) * r;
+    const py = y + Math.sin(a) * r;
+    if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// 打ち込み中の文字の範囲に、選択範囲のような薄いハイライトを、打ち込みの進み具合に合わせて伸ばす
+function drawHighlight(ctx, b, t) {
+  const ty = b.typing;
+  if (!ty || !b.title) return;
+  const t0 = b.revealAt + ty.startMs;
+  if (t < t0) return;
+  const total = Math.max(1, ty.totalMs);
+  const fade = clamp(1 - (t - (t0 + total + 250)) / 250, 0, 1);
+  if (fade <= 0) return;
+  ctx.fillStyle = rgba(DEEP, 0.14 * fade);
+  const tm = Math.max(1, ty.titleMs);
+  const u1 = clamp((t - t0) / tm, 0, 1);
+  ctx.fillRect(b.title.x, b.title.y, b.title.w * u1, b.title.h);
+  const body = b.body || [];
+  if (body.length && t > t0 + tm) {
+    const v = clamp((t - t0 - tm) / Math.max(1, total - tm), 0, 1);
+    let left = v * body.reduce((s, r) => s + r.w, 0);
+    for (const r of body) {
+      const ww = Math.min(r.w, left);
+      if (ww <= 0) break;
+      ctx.fillRect(r.x, r.y, ww, r.h);
+      left -= ww;
+    }
+  }
+}
+
 // 任意の時刻 tMs の1コマを描く（同じ plan と t なら、いつでも同じ絵になる）
-// view: { w, h, dpr, drawCount }（w/h は CSS ピクセル）
+// view: { w, h, dpr, drawCount, lite }（w/h は CSS ピクセル。lite=true のときは補助線・寸法ラベル・軌跡・影を省く）
 export function drawFrame(ctx, plan, tMs, view = {}) {
   const w = view.w || plan.viewport.w;
   const h = view.h || plan.viewport.h;
   const dpr = view.dpr || 1;
   const t = Number(tMs) || 0;
+  const lite = !!view.lite;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  const shown = Math.max(0, Math.min(plan.cursors.length, view.drawCount == null ? plan.cursors.length : view.drawCount));
-  const list = plan.cursors.slice(0, shown);
-  const states = list.map((c) => ({ c, p: positionAt(c, t) })).filter((s) => s.p.alpha > 0.01);
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
 
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  const shownBoxes = (plan.boxes || []).map((b) => ({ b, s: boxAt(b, t) })).filter((x) => x.s && x.s.a > 0.005);
 
-  // 掃き線（仕上げ）
-  if (plan.scan && t >= plan.finishAt && t <= plan.finishAt + PHASE.sweep * plan.totalMs) {
-    const x = w * clamp((t - plan.finishAt) / (PHASE.sweep * plan.totalMs), 0, 1);
-    const g = ctx.createLinearGradient(x - 70, 0, x, 0);
-    g.addColorStop(0, 'rgba(31,107,82,0)');
-    g.addColorStop(1, 'rgba(31,107,82,0.09)');
-    ctx.fillStyle = g;
-    ctx.fillRect(x - 70, 0, 70, h);
-    ctx.strokeStyle = 'rgba(31,107,82,0.55)';
+  // 補助線（四角の上下左右の辺から、画面の端まで）
+  if (!lite) {
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, h);
-    ctx.stroke();
+    for (const { s } of shownBoxes) {
+      const a = 0.22 * s.a * s.a;
+      if (a < 0.01) continue;
+      ctx.strokeStyle = rgba(GREEN, a);
+      ctx.beginPath();
+      const L = snap(s.x); const R = snap(s.x + s.w); const Tp = snap(s.y); const B = snap(s.y + s.h);
+      ctx.moveTo(0, Tp); ctx.lineTo(w, Tp);
+      ctx.moveTo(0, B); ctx.lineTo(w, B);
+      ctx.moveTo(L, 0); ctx.lineTo(L, h);
+      ctx.moveTo(R, 0); ctx.lineTo(R, h);
+      ctx.stroke();
+    }
   }
 
-  // 軌跡と、目標への細い線
-  for (const { c, p } of states) {
-    const moving = t > c.spawnAt && !(t >= c.arriveAt && t < c.leaveAt);
-    if (moving) {
+  // 四角（薄い塗り＋細い輪郭）と、中の部品（見出し・段落・アイコン）の小さな四角
+  for (const { b, s } of shownBoxes) {
+    ctx.fillStyle = rgba(GREEN, 0.08 * s.fillA * s.a);
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.25 + 0.65 * s.red) : rgba(GREEN, 0.7 * s.a);
+    ctx.strokeRect(snap(s.x), snap(s.y), Math.max(0, Math.round(s.w) - 1), Math.max(0, Math.round(s.h) - 1));
+    for (const p of b.parts) {
+      if (t < p.appearAt) continue;
+      const u = p.growEnd > p.appearAt ? easeInOutCubic((t - p.appearAt) / (p.growEnd - p.appearAt)) : 1;
+      const pw = Math.min(8, p.rect.w) + (p.rect.w - Math.min(8, p.rect.w)) * u;
+      const ph = Math.min(8, p.rect.h) + (p.rect.h - Math.min(8, p.rect.h)) * u;
+      ctx.fillStyle = rgba(GREEN, 0.06 * s.fillA * s.a);
+      ctx.fillRect(p.rect.x, p.rect.y, pw, ph);
+      ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.2 + 0.6 * s.red) : rgba(GREEN, 0.5 * s.a);
+      ctx.strokeRect(snap(p.rect.x), snap(p.rect.y), Math.max(0, Math.round(pw) - 1), Math.max(0, Math.round(ph) - 1));
+    }
+  }
+
+  // 打ち込み中の選択ハイライト
+  for (const b of plan.boxes || []) drawHighlight(ctx, b, t);
+
+  // 赤い前線（細い線＋弱いグロー。通った後ろに薄い帯）
+  if (plan.scan && t >= plan.lineStart && t <= plan.lineEnd) {
+    const x = snap(lineX(plan, t));
+    const g = ctx.createLinearGradient(x - 60, 0, x, 0);
+    g.addColorStop(0, rgba(RED, 0));
+    g.addColorStop(1, rgba(RED, 0.06));
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 60, 0, 60, h);
+    ctx.strokeStyle = rgba(RED, 0.16);
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    ctx.strokeStyle = rgba(RED, 0.95);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+
+  // 選択ハンドル（角と辺の中点の 5px の■）
+  ctx.lineWidth = 1;
+  for (const { s } of shownBoxes) {
+    const a = s.a * s.a;
+    if (a < 0.02) continue;
+    const xs = [s.x, s.x + s.w / 2, s.x + s.w];
+    const ys = [s.y, s.y + s.h / 2, s.y + s.h];
+    ctx.fillStyle = rgba([255, 255, 255], a);
+    ctx.strokeStyle = s.red > 0 ? rgba(RED, a) : rgba(GREEN, a);
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (i === 1 && j === 1) continue;
+        const px = Math.round(xs[i]) - 2;
+        const py = Math.round(ys[j]) - 2;
+        ctx.fillRect(px, py, 5, 5);
+        ctx.strokeRect(px + 0.5, py + 0.5, 4, 4);
+      }
+    }
+  }
+
+  // 寸法ラベル（W×H。四角が広がる間は数字も増える）
+  if (!lite && shownBoxes.length) {
+    ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.textBaseline = 'middle';
+    for (const { s } of shownBoxes) {
+      const a = s.a * s.a;
+      if (a < 0.03) continue;
+      const text = Math.round(s.w) + '×' + Math.round(s.h);
+      const tw = Math.ceil(ctx.measureText(text).width) + 6;
+      const lx = clamp(Math.round(s.x + s.w - tw), 2, Math.max(2, w - tw - 2));
+      let ly = Math.round(s.y + s.h + 4);
+      if (ly + 12 > h - 2) ly = Math.round(s.y + s.h - 16);
+      ctx.fillStyle = rgba(GREEN, 0.9 * a);
+      ctx.fillRect(lx, ly, tw, 12);
+      ctx.fillStyle = rgba([255, 255, 255], a);
+      ctx.fillText(text, lx + 3, ly + 6.5);
+    }
+  }
+
+  // 中央の小さな六角形（スキャン中）
+  if (plan.scan) {
+    const T = plan.totalMs;
+    const ha = 1 - clamp((t - PHASE.scanEnd * T) / (0.05 * T), 0, 1);
+    if (ha > 0.01) {
+      const hx = w / 2;
+      const hy = h / 2;
+      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = rgba(GREEN, 0.9 * ha);
+      drawHex(ctx, hx, hy, 9);
+      ctx.stroke();
+      ctx.fillStyle = rgba(GREEN, 0.55 * ha);
+      drawHex(ctx, hx, hy, 3.5);
+      ctx.fill();
+      const pu = (t % 1200) / 1200;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = rgba(GREEN, 0.35 * (1 - pu) * ha);
+      drawHex(ctx, hx, hy, 10 + 14 * pu);
+      ctx.stroke();
+    }
+  }
+
+  // カーソル（多色の小さな矢印。短い軌跡つき。名札は無し）
+  const shown = Math.max(0, Math.min(plan.cursors.length, view.drawCount == null ? plan.cursors.length : view.drawCount));
+  const states = [];
+  for (let i = 0; i < shown; i++) {
+    const c = plan.cursors[i];
+    const p = positionAt(c, t);
+    if (p.alpha > 0.01) states.push({ c, p });
+  }
+  if (!lite) {
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 1.2;
+    for (const { c, p } of states) {
+      const col = AGENT_RGB[c.colorIndex] || DEEP;
       let prev = p;
-      for (let k = 1; k <= TRAIL_SAMPLES; k++) {
+      let len = 0;
+      for (let k = 1; k <= TRAIL_SAMPLES && len < TRAIL_MAX_PX; k++) {
         const q = positionAt(c, t - k * TRAIL_STEP_MS);
-        const a = 0.5 * Math.min(p.alpha, q.alpha) * (1 - k / (TRAIL_SAMPLES + 1));
+        const a = 0.3 * Math.min(p.alpha, q.alpha) * (1 - k / (TRAIL_SAMPLES + 1));
+        len += Math.hypot(q.x - prev.x, q.y - prev.y);
         if (a > 0.01 && (Math.abs(prev.x - q.x) + Math.abs(prev.y - q.y)) > 0.3) {
-          ctx.strokeStyle = 'rgba(31,107,82,' + a.toFixed(3) + ')';
-          ctx.lineWidth = 1.4;
+          ctx.strokeStyle = rgba(col, a);
           ctx.beginPath();
           ctx.moveTo(prev.x, prev.y);
           ctx.lineTo(q.x, q.y);
@@ -362,63 +738,26 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
         prev = q;
       }
     }
-    if (t < c.flashAt && Math.hypot(c.aim.x - p.x, c.aim.y - p.y) < 240) {
-      ctx.strokeStyle = 'rgba(31,107,82,' + (0.35 * p.alpha).toFixed(3) + ')';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(c.aim.x, c.aim.y);
-      ctx.stroke();
-    }
+    ctx.lineCap = 'butt';
   }
-
-  // 到着の照準（□が広がって消える）
-  for (const { c } of states) {
-    const u = (t - c.flashAt) / FLASH_MS;
-    if (u < 0 || u >= 1) continue;
-    const half = 4 + 14 * (1 - Math.pow(1 - u, 3));
-    const a = 1 - u;
-    ctx.save();
-    ctx.shadowColor = 'rgba(31,107,82,0.7)';
-    ctx.shadowBlur = 6;
-    ctx.strokeStyle = 'rgba(31,107,82,' + a.toFixed(3) + ')';
-    ctx.fillStyle = 'rgba(31,107,82,' + (0.12 * a).toFixed(3) + ')';
-    ctx.lineWidth = 1;
-    ctx.fillRect(c.aim.x - half, c.aim.y - half, half * 2, half * 2);
-    ctx.strokeRect(c.aim.x - half + 0.5, c.aim.y - half + 0.5, half * 2, half * 2);
-    ctx.beginPath();
-    ctx.moveTo(c.aim.x - half - 4, c.aim.y); ctx.lineTo(c.aim.x - half + 3, c.aim.y);
-    ctx.moveTo(c.aim.x + half - 3, c.aim.y); ctx.lineTo(c.aim.x + half + 4, c.aim.y);
-    ctx.moveTo(c.aim.x, c.aim.y - half - 4); ctx.lineTo(c.aim.x, c.aim.y - half + 3);
-    ctx.moveTo(c.aim.x, c.aim.y + half - 3); ctx.lineTo(c.aim.x, c.aim.y + half + 4);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // カーソル本体と名札
-  ctx.font = '8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-  ctx.textBaseline = 'middle';
-  const labelW = ctx.measureText('AGENT-00').width + 6;
+  ctx.lineJoin = 'round';
   for (const { c, p } of states) {
+    const col = AGENT_RGB[c.colorIndex] || DEEP;
     ctx.save();
     ctx.globalAlpha = p.alpha;
-    ctx.translate(p.x, p.y);
+    ctx.translate(Math.round(p.x * 2) / 2, Math.round(p.y * 2) / 2);
+    if (!lite) {
+      ctx.shadowColor = rgba(col, 0.35);
+      ctx.shadowBlur = 3;
+      ctx.shadowOffsetY = 1;
+    }
     arrowPath(ctx);
-    ctx.fillStyle = COLOR_DARK;
+    ctx.fillStyle = c.color;
     ctx.fill();
-    ctx.lineWidth = 1;
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+    ctx.lineWidth = 0.9;
     ctx.strokeStyle = '#FFFFFF';
     ctx.stroke();
-    const typing = c.role === 'typist' && t >= c.flashAt && t < c.arriveAt;
-    if (!typing) {
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
-      ctx.fillRect(11, 14, labelW, 11);
-      ctx.strokeStyle = 'rgba(15,56,44,0.65)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(11.5, 14.5, labelW - 1, 10);
-      ctx.fillStyle = COLOR_DARK;
-      ctx.fillText(c.label, 14, 19.5);
-    }
     ctx.restore();
   }
 }
@@ -489,7 +828,8 @@ export function runSwarm({ canvas, plan, onReveal, onTick, onDone, onError, sign
         if (onDone) onDone();
         return;
       }
-      if (ctx) drawFrame(ctx, plan, t, { ...view, drawCount });
+      // 一度でも間引いたら、補助線・寸法ラベル・軌跡も省く（設計図の四角とハンドルは残る）
+      if (ctx) drawFrame(ctx, plan, t, { ...view, drawCount, lite: drawCount < plan.cursors.length });
       raf = requestAnimationFrame(frame);
     } catch (e) {
       fail(e);

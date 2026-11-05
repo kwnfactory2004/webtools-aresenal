@@ -129,13 +129,19 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 }
 .boot-panel::before { top: -1px; }
 .boot-panel::after { bottom: -1px; transform: scaleY(-1); }
-.boot-ring {
-  flex: none; width: 28px; height: 28px; border-radius: 50%;
-  border: 2px solid rgba(15, 56, 44, 0.15); border-top-color: var(--glow);
-  animation: boot-spin .9s linear infinite;
-}
-.boot-lines { display: flex; flex-direction: column; align-items: flex-start; }
-.boot-text { margin: 0; font-size: 14px; letter-spacing: .08em; line-height: 1.4; white-space: nowrap; }
+/* エージェントの色の丸（増えるたびに点く。色は swarm.js の AGENT_COLORS と同じ順） */
+.boot-dots { flex: none; display: flex; gap: 3px; }
+.boot-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .15; transition: opacity .2s; }
+.boot-dot.is-on { opacity: 1; }
+.boot-dot.d0, .boot-dot.d5 { color: #0F382C; }
+.boot-dot.d1 { color: #0E9AA7; }
+.boot-dot.d2 { color: #2F6FDE; }
+.boot-dot.d3 { color: #D6467F; }
+.boot-dot.d4 { color: #7B55D9; }
+.boot-lines { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.boot-status { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; line-height: 1.4; }
+.boot-text { font-size: 13px; letter-spacing: .08em; white-space: nowrap; font-weight: 600; }
+.boot-count { font-size: 11px; letter-spacing: .04em; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
 .boot-skip {
   margin: 0; padding: 4px 0; min-height: 32px;
   font: inherit; font-size: 11px; letter-spacing: .06em; color: var(--muted);
@@ -144,7 +150,21 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .swarm-canvas[hidden], .boot-skip[hidden] { display: none; }
 .boot-skip:hover { color: var(--glow-hover); }
 .boot-skip:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
-@keyframes boot-spin { to { transform: rotate(360deg); } }
+
+/* 起動中だけ、ヘッダーとグループラベルを隠す。設計図の四角のあと、赤い前線が通ると .bp-in でふわっと出る。
+   .is-booting はカードを描いた後・演出の直前に付く（それまではヘッダーは普通に見えている）。付いた瞬間は約150msでふっと消える。
+   保険: JS が固まって .is-booting が外れなくても、12秒後に boot-guard で必ず見える状態に戻る（演出は約7秒＋JSの保険タイマーは11秒）。
+   「動きを減らす」設定の animation:none !important はこの保険も止めるが、その設定では .is-booting 自体を付けない
+   （app.js の init で instant=true → useBoot=false）うえ、下の reduced-motion / print のルールで opacity:1 !important にしているので問題ない。 */
+.is-booting .site-logo:not(.bp-in), .is-booting .site-brand:not(.bp-in),
+.is-booting .site-title:not(.bp-in), .is-booting .section-label:not(.bp-in) {
+  opacity: 0;
+  transition: opacity .15s ease-out;
+  animation: boot-guard 0s linear 12s forwards;
+}
+@keyframes boot-guard { to { opacity: 1; } }
+.is-booting .bp-in { animation: bp-in .4s ease-out backwards; }
+@keyframes bp-in { from { opacity: 0; transform: translateY(4px); } }
 
 /* カードの登場: 画面に入ると .is-in が付く。下からふわっと出て、四隅ブラケットが伸び、文字が1文字ずつ打ち込まれる */
 .card.will-reveal:not(.is-in) { opacity: 0; }
@@ -174,6 +194,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   #boot, .swarm-canvas { display: none; }
+  .is-booting .site-logo, .is-booting .site-brand, .is-booting .site-title, .is-booting .section-label { opacity: 1 !important; }
   .ch { visibility: visible; }
   .ch::after { display: none; }
   .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
@@ -190,6 +211,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .ch { visibility: visible; }
   .ch::after, .sr-only { display: none; }
   #boot, .swarm-canvas { display: none; }
+  .is-booting .site-logo, .is-booting .site-brand, .is-booting .site-title, .is-booting .section-label { opacity: 1 !important; }
 }
 
 /* ---- 飾り: 十字マークとゆっくり動く点々 ---- */

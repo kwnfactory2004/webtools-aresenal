@@ -1,5 +1,5 @@
 // Web Tools Arsenal - 描画用の関数（ブラウザ専用の処理は別途追加する）
-import { buildSwarmPlan, runSwarm, swarmCount } from './swarm.js';
+import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT } from './swarm.js';
 
 const ICON_BODIES = {
   'calendar': '<path d="M8 2v3"></path><path d="M16 2v3"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path>',
@@ -190,16 +190,18 @@ export function bootPlan({ visited, reducedMotion }) {
   return { show: true, totalMs: 7000 };
 }
 
-// 起動の文字の段階。INITIALIZING 15% / LOADING 4段 55% / READY 20% / フェード 10%。
-// 群れの仕上げ（swarm.js の PHASE.finish = 70%）は READY の始まりと同じ時刻。
+// 起動の状態バーの段階（swarm.js の PHASE と同じ割合）。
+// SCANNING PAGE... 0〜17% / BUILDING LAYOUT 17〜46% / FILLING CONTENT 46〜86% / READY 86%〜（93%からフェード）
 export function bootStage(tMs, totalMs) {
-  const p = totalMs > 0 ? Math.min(1, Math.max(0, tMs / totalMs)) : 1;
-  if (p < 0.15) return { text: 'INITIALIZING...', leaving: false };
-  if (p < 0.7) {
-    const n = Math.min(4, Math.floor(((p - 0.15) / 0.55) * 4 + 1e-9) + 1);
-    return { text: 'LOADING TOOLS [' + barOf(n) + ']', leaving: false };
-  }
-  return { text: 'READY', leaving: p >= 0.9 };
+  const p = totalMs > 0 ? Math.min(1, Math.max(0, (Number(tMs) || 0) / totalMs)) : 1;
+  return { text: STAGE_TEXT[stageOf(p)], leaving: p >= PHASE.leave };
+}
+
+// 状態バーの数字の表示（例: 34 agents · 87 / 128 layers）
+export function bootCounts(status) {
+  const s = status || {};
+  const n = (v) => Math.max(0, Math.floor(Number(v)) || 0);
+  return n(s.agents) + ' agents · ' + n(s.layers) + ' / ' + n(s.totalLayers) + ' layers';
 }
 
 // 起動演出の後始末で、どのカードを今すぐ見せるか（純粋）。states: [{ revealed, inView }]
@@ -224,10 +226,6 @@ export function readVisited() {
   } catch (e) {
     return false;
   }
-}
-
-export function barOf(n) {
-  return '■'.repeat(n) + '□'.repeat(5 - n);
 }
 
 export function markVisited() {
@@ -346,17 +344,38 @@ function textBox(el) {
   }
 }
 
+const toBox = (r) => ({ x: r.left, y: r.top, w: r.width, h: r.height });
+// 複数の矩形をまとめた外枠
+function unionBox(rects) {
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  return { x: left, y: top, w: Math.max(...rects.map((r) => r.right)) - left, h: Math.max(...rects.map((r) => r.bottom)) - top };
+}
+
+// カードの設計図: 外枠＋中の部品（アイコン・見出し・本文）＋打ち込みのハイライト用の文字の矩形
 function describeTarget(card, id) {
-  const rr = card.getBoundingClientRect();
-  const target = { id, rect: { x: rr.left, y: rr.top, w: rr.width, h: rr.height } };
+  const target = { id, kind: 'card', rect: toBox(card.getBoundingClientRect()) };
   try {
+    const parts = [];
+    const icon = card.querySelector('.card-icon');
+    if (icon) parts.push(toBox(icon.getBoundingClientRect()));
     const titleEl = card.querySelector('.card-title');
     const tr = titleEl ? textBox(titleEl) : [];
     if (tr.length) {
-      const left = Math.min(...tr.map((r) => r.left));
-      const top = Math.min(...tr.map((r) => r.top));
-      target.title = { x: left, y: top, w: Math.max(...tr.map((r) => r.right)) - left, h: Math.max(...tr.map((r) => r.bottom)) - top };
+      target.title = unionBox(tr);
+      parts.push(target.title);
     }
+    // 本文（ハンドル → 説明の順。打ち込みと同じ順番）の行ごとの矩形
+    const body = [];
+    card.querySelectorAll('.card-handle, .card-desc').forEach((el) => {
+      const rs = textBox(el);
+      const u = unionBox(rs);
+      if (u) parts.push(u);
+      rs.forEach((r) => body.push(toBox(r)));
+    });
+    if (body.length) target.body = body;
+    target.parts = parts;
     const descEl = card.querySelector('.card-desc');
     const dr = descEl ? textBox(descEl) : [];
     if (dr.length) {
@@ -375,15 +394,30 @@ function describeTarget(card, id) {
   return target;
 }
 
-// 画面に見えているカードを左上→右下の順に並べる
-function visibleCardsInOrder(cards) {
+// 見出し・ラベルなどの設計図: 文字の部分だけの外枠（画像は要素の枠）
+function describeLabel(el, id) {
+  const box = el.tagName === 'IMG' ? null : unionBox(textBox(el));
+  return { id, kind: 'label', rect: box || toBox(el.getBoundingClientRect()) };
+}
+
+// 起動演出で組み立てる部品（ヘッダー・グループラベル・カード）。ページの表示順で、画面に見えているものだけ
+const INTRO_SELECTOR = '.site-logo, .site-brand, .site-title, .section-label, #grid .card, #links .card';
+function introElements() {
   const vh = window.innerHeight || document.documentElement.clientHeight;
   const vw = window.innerWidth || document.documentElement.clientWidth;
-  return cards
-    .map((el) => ({ el, r: el.getBoundingClientRect() }))
-    .filter(({ r }) => isInViewport(r, vh) && r.right > 0 && r.left < vw)
-    .sort((a, b) => (Math.abs(a.r.top - b.r.top) > 8 ? a.r.top - b.r.top : a.r.left - b.r.left))
-    .map(({ el }) => el);
+  return Array.from(document.querySelectorAll(INTRO_SELECTOR)).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && isInViewport(r, vh) && r.right > 0 && r.left < vw;
+  });
+}
+
+// 起動中だけ、ヘッダーとラベルを隠す（設計図→中身の順に出す）。外すと全部見える
+function setBooting(on) {
+  try { document.documentElement.classList.toggle('is-booting', !!on); } catch (e) { /* 何もしない */ }
+}
+function removeBoot(boot) {
+  try { if (boot) boot.remove(); } catch (e) { /* 次へ */ }
+  setBooting(false);
 }
 
 function canvasUsable(canvas) {
@@ -427,14 +461,16 @@ function forceAllVisible(boot, cards) {
   try { restoreAllTypings(); } catch (e) { /* 次へ */ }
   try { cards.forEach(revealNow); } catch (e) { /* 次へ */ }
   try { releaseCanvas(document.getElementById('swarm')); } catch (e) { /* 次へ */ }
-  try { if (boot) boot.remove(); } catch (e) { /* 次へ */ }
+  removeBoot(boot);
 }
 
-// ---- 起動演出: 群れがカードを組み立てる。起動の文字も同じ時計（runSwarm）で進める ----
+// ---- 起動演出: カーソルの群れが、設計図 → 中身の順にページを組み立てる。状態バーも同じ時計（runSwarm）で進める ----
 // 終わる（または途中でやめる）と resolve。#boot はここで取り除く。
-function runIntro(boot, cards, totalMs, visited) {
+function runIntro(boot, cards, totalMs) {
   return new Promise((resolve) => {
     const text = boot.querySelector('.boot-text');
+    const countEl = boot.querySelector('.boot-count');
+    const dots = Array.from(boot.querySelectorAll('.boot-dot'));
     const canvas = document.getElementById('swarm');
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -442,6 +478,8 @@ function runIntro(boot, cards, totalMs, visited) {
     const ctrl = new AbortController();
     let ended = false;
     let lastText = '';
+    let lastCount = '';
+    let lastDots = -1;
     const skipBtn = boot.querySelector('.boot-skip');
     // 透明なカードにフォーカスが乗らないよう、演出中だけ Tab の順番から外す
     const tabbed = [];
@@ -450,9 +488,15 @@ function runIntro(boot, cards, totalMs, visited) {
     });
     activeIntroEnd = (mode) => end(mode);
     const setText = (t) => { if (text && t !== lastText) { text.textContent = t; lastText = t; } };
-    const fadeMs = Math.round(totalMs * 0.1);
+    const setCount = (t) => { if (countEl && t !== lastCount) { countEl.textContent = t; lastCount = t; } };
+    const setDots = (n) => {
+      if (n === lastDots) return;
+      lastDots = n;
+      dots.forEach((d, i) => d.classList.toggle('is-on', i < n));
+    };
+    const fadeMs = Math.round(totalMs * (1 - PHASE.leave));
     boot.style.setProperty('--boot-fade', fadeMs + 'ms');
-    setText('INITIALIZING...');
+    setText(STAGE_TEXT.scan);
 
     function end(mode) {
       if (ended) return;
@@ -476,7 +520,7 @@ function runIntro(boot, cards, totalMs, visited) {
       }
       tabbed.forEach((el) => el.removeAttribute('tabindex'));
       releaseCanvas(canvas);
-      boot.remove();
+      removeBoot(boot); // ヘッダー・ラベルの「起動中だけ隠す」もここで外れる
       if (focusWasInBoot) moveFocusToPage(cards);
       markVisited();
       resolve();
@@ -506,39 +550,41 @@ function runIntro(boot, cards, totalMs, visited) {
     window.addEventListener('resize', onResize);
     if (skipBtn) skipBtn.hidden = false; // スキップできる状態になってから見せる
 
-    // 計画。canvas が使えない・計画に失敗したときは、群れ無しで起動の文字だけ（時計は同じ）
-    const useCanvas = canvasUsable(canvas);
+    // 計画（画面に見えている部品を、表示順に）。canvas が使えない・計画に失敗したときは、演出をやめて全部見せる
     let plan = null;
     const byId = new Map();
-    if (useCanvas) {
-      try {
-        const count = swarmCount({ w: vw, h: vh });
-        const picked = visibleCardsInOrder(cards).slice(0, Math.max(1, Math.floor(count / 4)));
-        const targets = picked.map((el, i) => {
-          const id = 'card-' + i;
-          byId.set(id, el);
-          return describeTarget(el, id);
-        });
-        plan = buildSwarmPlan({ targets, count, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh } });
-      } catch (e) {
-        plan = null;
-      }
+    try {
+      if (!canvasUsable(canvas)) throw new Error('canvas が使えません');
+      const targets = introElements().map((el, i) => {
+        const id = 'part-' + i;
+        byId.set(id, el);
+        return el.classList.contains('card') ? describeTarget(el, id) : describeLabel(el, id);
+      });
+      plan = buildSwarmPlan({ targets, count: swarmCount({ w: vw, h: vh }), totalMs, seed: randomSeed(), viewport: { w: vw, h: vh } });
+    } catch (e) {
+      end('error');
+      return;
     }
-    if (!plan) {
-      plan = { totalMs, viewport: { w: vw, h: vh }, scan: false, finishAt: totalMs, cursors: [], reveals: [] };
-    }
-    if (useCanvas) canvas.hidden = false;
+    canvas.hidden = false;
     runSwarm({
-      canvas: useCanvas ? canvas : null,
+      canvas,
       plan,
       signal: ctrl.signal,
       onReveal: ({ cardId }) => {
         const el = byId.get(cardId);
-        if (el && !el.classList.contains('is-in')) revealCard(el);
+        if (!el) return;
+        if (el.classList.contains('card')) {
+          if (!el.classList.contains('is-in')) revealCard(el);
+        } else {
+          el.classList.add('bp-in');
+        }
       },
       onTick: (t) => {
         const s = bootStage(t, totalMs);
+        const st = statusAt(plan, t);
         setText(s.text);
+        setCount(bootCounts(st));
+        setDots(Math.min(dots.length, st.agents));
         if (s.leaving) boot.classList.add('is-leaving');
       },
       onDone: () => end('done'),
@@ -547,7 +593,8 @@ function runIntro(boot, cards, totalMs, visited) {
   });
 }
 
-// ---- スクロールで入ったカード: 今まで通り IntersectionObserver で登場。小さな群れ（5個前後）が飛んでくる ----
+// ---- スクロールで入ったカード: IntersectionObserver で登場。短い版（約0.9秒）: 設計図の四角が広がり、
+// カーソル2〜3個がハンドルをつかみ、そのあと中身が埋まる（赤い線は無し） ----
 const MINI_MAX_CARDS = 3;
 let miniBusy = false;
 let miniTimer = null;
@@ -583,7 +630,7 @@ function revealBatch(els) {
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const totalMs = 900 + 250 * (group.length - 1);
-    const plan = buildSwarmPlan({ targets, count: group.length * 5, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false });
+    const plan = buildSwarmPlan({ targets, count: group.length * 3, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false });
     const flush = () => group.forEach((el) => { if (!el.classList.contains('is-in')) revealCard(el); });
     miniBusy = true;
     miniCtrl = new AbortController();
@@ -655,11 +702,13 @@ export async function init() {
   const boot = document.getElementById('boot');
   const visited = readVisited();
   const bp = bootPlan({ visited, reducedMotion: wantsReducedMotion() });
-  const instant = shouldRevealNow(window); // 動きを減らす設定／IntersectionObserver が無い: 演出なしで全部見せる
+  // 動きを減らす設定／IntersectionObserver が無い／canvas が使えない: 演出なし（群れも設計図も無く、全カードをすぐ見せる）
+  const instant = shouldRevealNow(window) || !canvasUsable(document.getElementById('swarm'));
   const useBoot = !!boot && bp.show && !instant;
   if (boot) {
+    // ヘッダーを隠す .is-booting はまだ付けない（tools.json の読み込みが遅くても、ヘッダーは見えたまま）
     if (useBoot) boot.hidden = false;
-    else boot.remove();
+    else removeBoot(boot);
   }
 
   let r;
@@ -669,7 +718,7 @@ export async function init() {
     r = { ok: false };
   }
   if (!r.ok) {
-    if (boot) boot.remove();
+    removeBoot(boot);
     grid.innerHTML = '<p role="alert">読み込めませんでした</p>';
     links.innerHTML = '';
     return;
@@ -690,9 +739,12 @@ export async function init() {
     if (useBoot && cards.length > 0) {
       // 保険: 演出の想定終了（totalMs）＋余裕のあとも終わっていなければ、強制的に終える
       safety = setTimeout(() => { if (activeIntroEnd) activeIntroEnd('error'); }, bp.totalMs + 4000);
-      await runIntro(boot, cards, bp.totalMs, visited);
-    } else if (boot) {
-      boot.remove();
+      // カードを描き終えて、演出を始める直前にだけヘッダー・ラベルを隠す（約150msでふっと消える）。
+      // 外すのは removeBoot: runIntro の end()（完了・スキップ・中断・失敗）と、下の catch の forceAllVisible の両方から必ず通る
+      setBooting(true);
+      await runIntro(boot, cards, bp.totalMs);
+    } else {
+      removeBoot(boot);
     }
     markVisited();
     if (!instant && cards.length > 0) setupReveal(cards);
