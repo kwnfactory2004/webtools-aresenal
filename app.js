@@ -187,7 +187,7 @@ export function bootPlan({ visited, reducedMotion }) {
   if (reducedMotion) return { show: false, totalMs: 0 };
   // 初回も2回目以降も、同じ長さのフル演出（visited は互換のため受け取るだけ）
   void visited;
-  return { show: true, totalMs: 10000 };
+  return { show: true, totalMs: 7000 };
 }
 
 // 起動の文字の段階。INITIALIZING 15% / LOADING 4段 55% / READY 20% / フェード 10%。
