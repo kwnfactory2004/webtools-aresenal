@@ -35,9 +35,9 @@ const TRAIL_SAMPLES = 6;
 const TRAIL_STEP_MS = 12;
 const TRAIL_MAX_PX = 48; // 軌跡は短く（速く動いても約48pxまで）
 const FADE_IN_MS = 160;
-const INK = [11, 11, 11]; // #0B0B0B（設計図の線・塗り・寸法ラベル）
+const GREEN = [31, 107, 82]; // #1F6B52（設計図の線・塗り・六角形）
 const WHITE = [255, 255, 255];
-const DEEP = [15, 56, 44]; // #0F382C（選択ハイライト）
+const DEEP = [15, 56, 44]; // #0F382C（補助線・寸法ラベル・選択ハイライト）
 const RED = [229, 72, 77]; // #E5484D
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -187,7 +187,7 @@ export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, se
       box.typing = { startMs: TYPE_START_MS, titleMs: Math.max(0, Number(tg.typing.titleMs) || 0), totalMs: Math.max(0, tg.typing.totalMs) };
     }
     if (tg.descEnd && Number.isFinite(tg.descEnd.x) && Number.isFinite(tg.descEnd.y)) box.descEnd = { x: tg.descEnd.x, y: tg.descEnd.y };
-    if (tg.tone === 'dark') box.tone = 'dark'; // 黒い面の上の部品（設計図を白で描く）
+    if (tg.tone === 'dark') box.tone = 'dark'; // 深緑の帯の上の部品（設計図を白で描く）
     return box;
   });
 
@@ -599,9 +599,9 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
   if (!lite) {
     ctx.lineWidth = 1;
     for (const { s } of shownBoxes) {
-      const a = 0.14 * s.a * s.a;
+      const a = 0.22 * s.a * s.a;
       if (a < 0.01) continue;
-      ctx.strokeStyle = rgba(INK, a);
+      ctx.strokeStyle = rgba(DEEP, a);
       ctx.beginPath();
       const L = snap(s.x); const R = snap(s.x + s.w); const Tp = snap(s.y); const B = snap(s.y + s.h);
       ctx.moveTo(0, Tp); ctx.lineTo(w, Tp);
@@ -613,23 +613,23 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
   }
 
   // 四角（薄い塗り＋細い輪郭）と、中の部品（見出し・段落・アイコン）の小さな四角。
-  // 色は ink（#0B0B0B）。黒いヘッダー帯の上の部品（tone:'dark'）だけ白で描く
+  // 色は深緑（#1F6B52）。深緑のヘッダー帯の上の部品（tone:'dark'）だけ白で描く
   for (const { b, s } of shownBoxes) {
-    const ink = b.tone === 'dark' ? WHITE : INK;
-    const k = b.tone === 'dark' ? 1.4 : 1;
-    ctx.fillStyle = rgba(ink, 0.04 * k * s.fillA * s.a);
+    const dark = b.tone === 'dark';
+    const ink = dark ? WHITE : GREEN;
+    ctx.fillStyle = rgba(ink, (dark ? 0.06 : 0.08) * s.fillA * s.a);
     ctx.fillRect(s.x, s.y, s.w, s.h);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.25 + 0.65 * s.red) : rgba(ink, 0.55 * k * s.a);
+    ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.25 + 0.65 * s.red) : rgba(ink, (dark ? 0.75 : 0.7) * s.a);
     ctx.strokeRect(snap(s.x), snap(s.y), Math.max(0, Math.round(s.w) - 1), Math.max(0, Math.round(s.h) - 1));
     for (const p of b.parts) {
       if (t < p.appearAt) continue;
       const u = p.growEnd > p.appearAt ? easeInOutCubic((t - p.appearAt) / (p.growEnd - p.appearAt)) : 1;
       const pw = Math.min(8, p.rect.w) + (p.rect.w - Math.min(8, p.rect.w)) * u;
       const ph = Math.min(8, p.rect.h) + (p.rect.h - Math.min(8, p.rect.h)) * u;
-      ctx.fillStyle = rgba(ink, 0.03 * s.fillA * s.a);
+      ctx.fillStyle = rgba(ink, 0.06 * s.fillA * s.a);
       ctx.fillRect(p.rect.x, p.rect.y, pw, ph);
-      ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.2 + 0.6 * s.red) : rgba(ink, 0.36 * s.a);
+      ctx.strokeStyle = s.red > 0 ? rgba(RED, 0.2 + 0.6 * s.red) : rgba(ink, 0.5 * s.a);
       ctx.strokeRect(snap(p.rect.x), snap(p.rect.y), Math.max(0, Math.round(pw) - 1), Math.max(0, Math.round(ph) - 1));
     }
   }
@@ -653,7 +653,7 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
   }
 
-  // 選択ハンドル（角と辺の中点の 5px の■。白塗り＋ink の縁。黒い面の上は黒塗り＋白の縁）
+  // 選択ハンドル（角と辺の中点の 5px の■。白塗り＋深緑の縁。深緑の帯の上は深緑塗り＋白の縁）
   ctx.lineWidth = 1;
   for (const { b, s } of shownBoxes) {
     const a = s.a * s.a;
@@ -661,8 +661,8 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
     const xs = [s.x, s.x + s.w / 2, s.x + s.w];
     const ys = [s.y, s.y + s.h / 2, s.y + s.h];
     const dark = b.tone === 'dark';
-    ctx.fillStyle = rgba(dark ? INK : WHITE, a);
-    ctx.strokeStyle = s.red > 0 ? rgba(RED, a) : rgba(dark ? WHITE : INK, a);
+    ctx.fillStyle = rgba(dark ? DEEP : WHITE, a);
+    ctx.strokeStyle = s.red > 0 ? rgba(RED, a) : rgba(dark ? WHITE : GREEN, a);
     for (let i = 0; i < 3; i++) {
       for (let j = 0; j < 3; j++) {
         if (i === 1 && j === 1) continue;
@@ -687,10 +687,10 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
       const lx = clamp(Math.round(s.x + s.w - tw), 2, Math.max(2, w - tw - 2));
       let ly = Math.round(s.y + s.h + 4);
       if (ly + 12 > h - 2) ly = Math.round(s.y + s.h - 16);
-      // 黒地＋白の等幅（黒い面の上は白地＋黒）
-      ctx.fillStyle = rgba(dark ? WHITE : INK, 0.92 * a);
+      // 深緑地＋白の等幅（深緑の帯の上は白地＋深緑）
+      ctx.fillStyle = rgba(dark ? WHITE : DEEP, 0.92 * a);
       ctx.fillRect(lx, ly, tw, 12);
-      ctx.fillStyle = rgba(dark ? INK : WHITE, a);
+      ctx.fillStyle = rgba(dark ? DEEP : WHITE, a);
       ctx.fillText(text, lx + 3, ly + 6.5);
     }
   }
@@ -703,15 +703,15 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
       const hx = w / 2;
       const hy = h / 2;
       ctx.lineWidth = 1.3;
-      ctx.strokeStyle = rgba(INK, 0.9 * ha);
+      ctx.strokeStyle = rgba(GREEN, 0.9 * ha);
       drawHex(ctx, hx, hy, 9);
       ctx.stroke();
-      ctx.fillStyle = rgba(INK, 0.55 * ha);
+      ctx.fillStyle = rgba(GREEN, 0.55 * ha);
       drawHex(ctx, hx, hy, 3.5);
       ctx.fill();
       const pu = (t % 1200) / 1200;
       ctx.lineWidth = 1;
-      ctx.strokeStyle = rgba(INK, 0.35 * (1 - pu) * ha);
+      ctx.strokeStyle = rgba(GREEN, 0.35 * (1 - pu) * ha);
       drawHex(ctx, hx, hy, 10 + 14 * pu);
       ctx.stroke();
     }
