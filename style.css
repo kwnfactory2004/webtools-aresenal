@@ -1,23 +1,24 @@
-/* Web Tools Arsenal - 明るい灰色の面＋点々、黒い帯、ドット文字。アクセントは深緑 #0F382C */
+/* Web Tools Arsenal - 白い面＋薄い緑の点々、深緑の帯、ドット文字。ブランド色は深緑 #0F382C */
 :root {
-  --bg: #F5F5F5;
+  --bg: #FFFFFF;
   --card: #FFFFFF;
-  --ink: #0B0B0B;
+  --ink: #0F382C; /* 帯・アイコン・ラベル・リンク・ボタン・状態バーの色（深緑） */
   --base: #0F382C;
   --glow: #0F382C; /* アクセント（深緑） */
   --glow-hover: #1F6B52;
-  --accent-on-dark: #2FA37B; /* 黒の上で見える明るめの深緑 */
-  --text: #0B0B0B;
-  --muted: #6B6B6B;
-  --line: rgba(0, 0, 0, 0.08);
+  --accent-on-dark: #6FD4A8; /* 深緑の上で見える明るいミント */
+  --on-dark: #D9EBE3; /* 深緑の上の小さな文字 */
+  --text: #12261F;
+  --muted: #4A6159;
+  --line: rgba(15, 56, 44, 0.16);
   --sans: "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
-/* 背景: 間隔をあけた小さな点（直径約2px・48px おき） */
+/* 背景: 白の上に、間隔をあけた小さな薄い緑の点（直径約2px・48px おき） */
 html {
   background-color: var(--bg);
-  background-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.16) 0 1px, transparent 1.4px);
+  background-image: radial-gradient(circle at center, rgba(15, 56, 44, 0.16) 0 1px, transparent 1.4px);
   background-size: 48px 48px;
   background-position: 0 0;
 }
@@ -36,10 +37,10 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
 .dot-words { display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.72em; row-gap: 0.42em; }
 .dot-fallback { font-family: var(--mono); letter-spacing: 0.08em; }
 
-/* ---- ヘッダー: 黒い帯＋白い点々 ---- */
+/* ---- ヘッダー: 深緑の帯＋白い点々 ---- */
 .site-header {
   background-color: var(--ink);
-  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.4px);
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.4px);
   background-size: 24px 24px;
   background-position: 12px 12px;
   color: #FFFFFF;
@@ -54,7 +55,7 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
   background: #FFFFFF; border-radius: 14px; object-fit: contain;
 }
 .site-head-text { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
-.site-brand { margin: 0; display: flex; align-items: center; gap: 9px; color: #C4C4C4; font-size: 12px; }
+.site-brand { margin: 0; display: flex; align-items: center; gap: 9px; color: var(--on-dark); font-size: 12px; }
 .brand-mark { flex: none; width: 7px; height: 7px; background: var(--accent-on-dark); }
 .site-title { margin: 0; font-size: clamp(24px, 3.4vw, 44px); font-weight: 400; line-height: 1; color: #FFFFFF; }
 .site-title:focus { outline: none; }
@@ -77,7 +78,7 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
   .card--link { grid-column: span 2; }
 }
 
-/* ---- カード: 白・丸角・細い線・影ほぼ無し。四隅の内側に控えめな HUD カッコ ---- */
+/* ---- カード: 白・丸角・薄い深緑の線・ごく弱い影。四隅の内側に控えめな HUD カッコ ---- */
 .card {
   position: relative;
   display: flex; flex-direction: column; gap: 10px;
@@ -87,11 +88,12 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 56, 44, 0.06);
   transition: border-color .2s;
 }
 .card::before, .card::after {
   content: ""; position: absolute; left: 8px; right: 8px; height: 10px; pointer-events: none;
-  --c: var(--card-c, rgba(15, 56, 44, 0.5));
+  --c: var(--card-c, rgba(15, 56, 44, 0.55));
   background:
     linear-gradient(var(--c), var(--c)) left 0 top 0 / 10px 1px no-repeat,
     linear-gradient(var(--c), var(--c)) left 0 top 0 / 1px 10px no-repeat,
@@ -101,7 +103,7 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
 .card::before { top: 8px; }
 .card::after { bottom: 8px; transform: scaleY(-1); }
 .card:hover, .card:focus-visible {
-  border-color: rgba(0, 0, 0, 0.22);
+  border-color: rgba(15, 56, 44, 0.4);
   --card-c: var(--glow);
   outline: none;
 }
@@ -109,16 +111,16 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .card-icon { color: var(--ink); width: 40px; height: 40px; }
 .card-icon svg { display: block; width: 40px; height: 40px; }
 .card-title {
-  margin: 6px 0 0; font-size: 26px; font-weight: 300; letter-spacing: -0.01em; line-height: 1.2;
+  margin: 6px 0 0; color: var(--ink); font-size: 26px; font-weight: 300; letter-spacing: -0.01em; line-height: 1.2;
   display: flex; align-items: center; gap: 8px;
 }
 .card-desc { margin: 0; color: var(--muted); font-size: 14px; }
 .card-handle { margin: 0; color: var(--ink); font-size: 13px; font-family: var(--mono); letter-spacing: 0.04em; }
-/* 右下の小さなリンク表示（ドット文字 OPEN >。細い下線、ホバーで深緑） */
-.card-cta { margin-top: auto; padding-top: 10px; align-self: flex-end; color: #3A3A3A; }
+/* 右下の小さなリンク表示（ドット文字 OPEN >。深緑・細い下線、ホバーで明るい深緑） */
+.card-cta { margin-top: auto; padding-top: 10px; align-self: flex-end; color: var(--ink); }
 .card-cta svg.dot { height: 10px; }
 .cta-link { display: inline-flex; padding-bottom: 5px; border-bottom: 1px solid currentColor; transition: color .2s; }
-.card:hover .card-cta, .card:focus-visible .card-cta { color: var(--glow); }
+.card:hover .card-cta, .card:focus-visible .card-cta { color: var(--glow-hover); }
 .card-cta.is-soon-label { color: var(--muted); }
 .badge {
   font-family: var(--mono); letter-spacing: 0.08em;
@@ -129,7 +131,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .site-footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; font-family: var(--mono); letter-spacing: 0.06em; }
 
 /* ---- 起動アニメーション ---- */
-/* 画面は透明にして、ページ（点々の面と空のカード枠）と群れが見えるようにする。文字は下部中央の黒い丸角のピル */
+/* 画面は透明にして、ページ（点々の面と空のカード枠）と群れが見えるようにする。文字は下部中央の深緑の丸角のピル */
 .swarm-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 90; }
 #boot {
   position: fixed; inset: 0; z-index: 100; pointer-events: none;
@@ -147,10 +149,10 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   padding: 10px 12px 10px 20px;
   background: var(--ink);
   border-radius: 999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 20px rgba(15, 56, 44, 0.22);
   pointer-events: auto; cursor: pointer;
 }
-/* エージェントの色の丸（増えるたびに点く。色は swarm.js の AGENT_COLORS と同じ順。深緑は黒の上で見える明るめの色） */
+/* エージェントの色の丸（増えるたびに点く。色は swarm.js の AGENT_COLORS と同じ順。深緑は、深緑の上で見えるミント） */
 .boot-dots { flex: none; display: flex; gap: 4px; }
 .boot-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .22; transition: opacity .2s; }
 .boot-dot.is-on { opacity: 1; }
@@ -163,11 +165,11 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .boot-status { margin: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; row-gap: 4px; line-height: 1.4; }
 .boot-text { display: inline-flex; align-items: center; min-height: 16px; color: #FFFFFF; }
 .boot-text svg.dot { height: 11px; }
-.boot-count { font-size: 11px; letter-spacing: .04em; white-space: nowrap; color: #A8A8A8; font-variant-numeric: tabular-nums; }
+.boot-count { font-size: 11px; letter-spacing: .04em; white-space: nowrap; color: var(--on-dark); font-variant-numeric: tabular-nums; }
 .boot-skip {
   margin: 0; padding: 3px 10px; min-height: 28px;
-  font: inherit; font-size: 11px; letter-spacing: .04em; color: #8A8A8A;
-  background: none; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 999px; cursor: pointer; text-align: left;
+  font: inherit; font-size: 11px; letter-spacing: .04em; color: #A9CFBF;
+  background: none; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px; cursor: pointer; text-align: left;
 }
 .swarm-canvas[hidden], .boot-skip[hidden] { display: none; }
 .boot-skip:hover { color: #FFFFFF; border-color: rgba(255, 255, 255, 0.5); }
@@ -178,7 +180,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 
 /* 起動中だけ、ヘッダーとグループラベルを隠す。設計図の四角のあと、赤い前線が通ると .bp-in でふわっと出る。
    .is-booting はカードを描いた後・演出の直前に付く（それまではヘッダーは普通に見えている）。付いた瞬間は約150msでふっと消える。
-   黒いヘッダー帯（.site-header の背景）は隠さない。中のロゴ・ブランド・タイトルだけが消え、空の黒い帯が残る。
+   深緑のヘッダー帯（.site-header の背景）は隠さない。中のロゴ・ブランド・タイトルだけが消え、空の深緑の帯が残る。
    保険: JS が固まって .is-booting が外れなくても、12秒後に boot-guard で必ず見える状態に戻る（演出は約7秒＋JSの保険タイマーは11秒）。
    「動きを減らす」設定の animation:none !important はこの保険も止めるが、その設定では .is-booting 自体を付けない
    （app.js の init で instant=true → useBoot=false）うえ、下の reduced-motion / print のルールで opacity:1 !important にしているので問題ない。 */
@@ -228,7 +230,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .card.will-reveal:not(.is-in)::before, .card.will-reveal:not(.is-in)::after { opacity: 1; }
 }
 
-/* 印刷・PDF保存: 隠れたカードを残さない。黒い帯は白地＋黒文字に、点々は消す */
+/* 印刷・PDF保存: 隠れたカードを残さない。深緑の帯は白地＋黒文字に、点々は消す */
 @media print {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .card.will-reveal:not(.is-in):not(.is-soon) { opacity: 1; }
@@ -251,7 +253,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .group + .group, #grid + .section-label { margin-top: 36px; }
 .noscript { text-align: center; color: var(--text); }
 
-/* ---- ホーム画面に追加する案内（黒の丸角の小ボタン、白の丸角のパネル） ---- */
+/* ---- ホーム画面に追加する案内（深緑の丸角の小ボタン、白の丸角のパネル） ---- */
 .a2hs { margin-top: 36px; }
 .a2hs[hidden], .a2hs-panel[hidden] { display: none; }
 .a2hs-btn {
@@ -259,7 +261,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   font-size: 14px; font-weight: 500; letter-spacing: 0.02em; min-height: 44px; padding: 10px 20px;
   color: #FFFFFF; background: var(--ink); border: 0; border-radius: 10px; cursor: pointer;
 }
-.a2hs-btn:hover { background: #2A2A2A; }
+.a2hs-btn:hover { background: var(--glow-hover); }
 .a2hs-btn:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .a2hs-panel {
   position: relative; margin-top: 12px; padding: 20px 24px;

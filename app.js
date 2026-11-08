@@ -392,7 +392,7 @@ function describeTarget(card, id) {
 }
 
 // 見出し・ラベルなどの設計図: 文字（またはドット文字の SVG）の部分だけの外枠。画像や、測れないときは要素の枠。
-// tone: 黒いヘッダー帯の中の部品は 'dark'（設計図を白で描く）
+// tone: 深緑のヘッダー帯の中の部品は 'dark'（設計図を白で描く）
 function contentBox(el) {
   try {
     if (el.tagName === 'IMG') return null;
