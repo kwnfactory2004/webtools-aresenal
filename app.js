@@ -1,26 +1,11 @@
 // Web Tools Arsenal - 描画用の関数（ブラウザ専用の処理は別途追加する）
 import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT } from './swarm.js';
+import { DOT_ICONS, dotIconSvg, dotSvg, dotText } from './dotfont.js';
 
-const ICON_BODIES = {
-  'calendar': '<path d="M8 2v3"></path><path d="M16 2v3"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path>',
-  'book-open': '<path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"></path>',
-  'timer': '<line x1="10" x2="14" y1="2" y2="2"></line><line x1="12" x2="15" y1="14" y2="11"></line><circle cx="12" cy="14" r="8"></circle>',
-  'heart': '<path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path>',
-  'wallet': '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path>',
-  'instagram': '<rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line>',
-  'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>',
-  'flame': '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
-  'arrow-right': '<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
-};
+// アイコンは点で描いたドットアイコン（11×11。dotfont.js の DOT_ICONS）。名前は tools.json の icon と同じ
+export const ICONS = Object.fromEntries(Object.keys(DOT_ICONS).map((name) => [name, dotIconSvg(name)]));
 
-export const ICONS = Object.fromEntries(
-  Object.entries(ICON_BODIES).map(([name, body]) => [
-    name,
-    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`,
-  ])
-);
-
-const EMPTY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"></svg>';
+const EMPTY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 11 11" aria-hidden="true"></svg>';
 
 export function iconSvg(name) {
   return Object.prototype.hasOwnProperty.call(ICONS, name) ? ICONS[name] : EMPTY_SVG;
@@ -46,19 +31,29 @@ export function normalizeTools(data) {
   return data.tools.map((t) => ({ ...t, status: t.status ?? 'live', size: t.size ?? 'small' }));
 }
 
+const SMALL_DOT = 0.95; // 小さいドット文字は点を少し太く（tools/gen-index.mjs のブランドと同じ値）
+
+// カード右下の小さなリンク表示（ドット文字）。開けるカードは「OPEN >」（リンクの名前と重ならないよう読み上げない）、
+// 準備中は「SOON」（読み上げる）
+function cardCta(soon) {
+  return soon
+    ? `<div class="card-cta is-soon-label">${dotSvg('SOON', { className: 'dot-cta', dot: SMALL_DOT })}</div>`
+    : `<div class="card-cta"><span class="cta-link">${dotSvg('OPEN >', { className: 'dot-cta', decorative: true, dot: SMALL_DOT })}</span></div>`;
+}
+
 export function renderCard(tool) {
   const name = escapeHtml(tool.name);
   const desc = escapeHtml(tool.description);
   const classes = ['card'];
   if (tool.size === 'large') classes.push('card--large');
   const badge = tool.status === 'beta' ? '<span class="badge">β</span>' : '';
-  const soonLabel = tool.status === 'soon' ? '<span class="badge badge--soon">Coming soon</span>' : '';
+  const soon = tool.status === 'soon' || !isSafeUrl(tool.url);
   const inner =
     `<div class="card-icon">${iconSvg(tool.icon)}</div>` +
     `<h2 class="card-title">${name}${badge}</h2>` +
     `<p class="card-desc">${desc}</p>` +
-    `<div class="card-arrow">${tool.status === 'soon' ? soonLabel : iconSvg('arrow-right')}</div>`;
-  if (tool.status === 'soon' || !isSafeUrl(tool.url)) {
+    cardCta(soon);
+  if (soon) {
     classes.push('is-soon');
     return `<div class="${classes.join(' ')}" aria-disabled="true">${inner}</div>`;
   }
@@ -84,7 +79,7 @@ export function groupTools(tools, groups) {
 export function renderGroups(sections) {
   return sections
     .map((sec) => {
-      const label = sec.label ? `<p class="section-label">${escapeHtml(sec.label)}</p>` : '';
+      const label = sec.label ? `<p class="section-label">${dotText(sec.label, { className: 'dot-label' })}</p>` : '';
       return `<section class="group">${label}<div class="tool-grid">${sec.tools.map((t) => renderCard(t)).join('')}</div></section>`;
     })
     .join('');
@@ -96,7 +91,7 @@ export function renderLink(link) {
     `<h2 class="card-title">${escapeHtml(link.name)}</h2>` +
     `<p class="card-handle">${escapeHtml(link.handle)}</p>` +
     `<p class="card-desc">${escapeHtml(link.description)}</p>` +
-    `<div class="card-arrow">${iconSvg('arrow-right')}</div>`;
+    cardCta(!isSafeUrl(link.url));
   if (!isSafeUrl(link.url)) {
     return `<div class="card card--link is-soon" aria-disabled="true">${inner}</div>`;
   }
@@ -375,6 +370,8 @@ function describeTarget(card, id) {
       rs.forEach((r) => body.push(toBox(r)));
     });
     if (body.length) target.body = body;
+    const cta = card.querySelector('.card-cta svg');
+    if (cta) parts.push(toBox(cta.getBoundingClientRect()));
     target.parts = parts;
     const descEl = card.querySelector('.card-desc');
     const dr = descEl ? textBox(descEl) : [];
@@ -394,10 +391,25 @@ function describeTarget(card, id) {
   return target;
 }
 
-// 見出し・ラベルなどの設計図: 文字の部分だけの外枠（画像は要素の枠）
+// 見出し・ラベルなどの設計図: 文字（またはドット文字の SVG）の部分だけの外枠。画像や、測れないときは要素の枠。
+// tone: 黒いヘッダー帯の中の部品は 'dark'（設計図を白で描く）
+function contentBox(el) {
+  try {
+    if (el.tagName === 'IMG') return null;
+    const hasText = Array.from(el.querySelectorAll('*')).concat(el).some((n) => n.namespaceURI !== 'http://www.w3.org/2000/svg'
+      && Array.from(n.childNodes).some((c) => c.nodeType === 3 && c.data.trim()));
+    const rects = hasText ? textBox(el) : [];
+    if (rects.length) return unionBox(rects);
+    const svgs = Array.from(el.querySelectorAll('svg')).map((s) => s.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    return unionBox(svgs);
+  } catch (e) {
+    return null;
+  }
+}
 function describeLabel(el, id) {
-  const box = el.tagName === 'IMG' ? null : unionBox(textBox(el));
-  return { id, kind: 'label', rect: box || toBox(el.getBoundingClientRect()) };
+  const box = contentBox(el);
+  const dark = !!(el.closest && el.closest('.site-header'));
+  return { id, kind: 'label', rect: box || toBox(el.getBoundingClientRect()), ...(dark ? { tone: 'dark' } : {}) };
 }
 
 // 起動演出で組み立てる部品（ヘッダー・グループラベル・カード）。ページの表示順で、画面に見えているものだけ
@@ -487,7 +499,8 @@ function runIntro(boot, cards, totalMs) {
       if (!el.classList.contains('is-in') && !el.hasAttribute('tabindex')) { el.setAttribute('tabindex', '-1'); tabbed.push(el); }
     });
     activeIntroEnd = (mode) => end(mode);
-    const setText = (t) => { if (text && t !== lastText) { text.textContent = t; lastText = t; } };
+    // 段階名はドット文字（状態バーは aria-hidden なので読み上げない）。中身は STAGE_TEXT の決まった文字だけ
+    const setText = (t) => { if (text && t !== lastText) { text.innerHTML = dotSvg(t, { className: 'dot-stage', decorative: true }); lastText = t; } };
     const setCount = (t) => { if (countEl && t !== lastCount) { countEl.textContent = t; lastCount = t; } };
     const setDots = (n) => {
       if (n === lastDots) return;
