@@ -347,3 +347,26 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .today-tags { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .today { transition: none; } }
+
+/* ---- 「今日の学校の予定」の登場アニメーション（最初の1回だけ。today.js が .is-intro を付け外し）----
+   流れ: タイルがふわっと → ドット文字が左から打ち出される → 授業の行が順に → 今の授業の目盛りが1つずつ → 明日の行。約1.8秒。
+   起動演出中は止めておき、演出が終わった瞬間に始まる。「動きを減らす」ではなし */
+@keyframes today-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes today-print { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes today-seg { from { background-color: rgba(255, 255, 255, 0.22); } to { background-color: #FFFFFF; } }
+@keyframes today-fade { from { opacity: 0; } to { opacity: 1; } }
+.today.is-intro { animation: today-in .45s ease-out both; }
+.today.is-intro .today-label svg.dot, .today.is-intro .today-link svg.dot,
+.today.is-intro .today-row.is-now .today-per svg.dot { animation: today-print .7s steps(16, end) .2s both; }
+.today.is-intro .today-row { animation: today-in .45s ease-out both; animation-delay: calc(.4s + var(--i, 0) * .14s); }
+.today-row:nth-child(1) { --i: 0; } .today-row:nth-child(2) { --i: 1; } .today-row:nth-child(3) { --i: 2; }
+.today-row:nth-child(4) { --i: 3; } .today-row:nth-child(5) { --i: 4; } .today-row:nth-child(n+6) { --i: 5; }
+.today.is-intro .today-bar i.f { animation: today-seg .25s ease-out both; animation-delay: calc(.9s + var(--k, 0) * 80ms); }
+.today-bar i:nth-child(1) { --k: 0; } .today-bar i:nth-child(2) { --k: 1; } .today-bar i:nth-child(3) { --k: 2; }
+.today-bar i:nth-child(4) { --k: 3; } .today-bar i:nth-child(5) { --k: 4; } .today-bar i:nth-child(6) { --k: 5; }
+.today-bar i:nth-child(7) { --k: 6; } .today-bar i:nth-child(8) { --k: 7; } .today-bar i:nth-child(9) { --k: 8; }
+.today-bar i:nth-child(10) { --k: 9; }
+.today.is-intro .today-off, .today.is-intro .today-done, .today.is-intro .today-items { animation: today-fade .5s ease-out .6s both; }
+.today.is-intro .today-tomorrow { animation: today-fade .5s ease-out 1.3s both; }
+.is-booting .today.is-intro, .is-booting .today.is-intro * { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .today.is-intro, .today.is-intro * { animation: none !important; } }
