@@ -281,3 +281,69 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
   .site-title { font-size: 24px; }
   .page { padding-top: 28px; }
 }
+
+/* ---- 一番上の「今日の学校の予定」（today.js）。白タイル・深緑。今の授業だけ深緑の地 ---- */
+.today {
+  margin: 0 0 22px; padding: 16px 18px 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 56, 44, 0.06);
+  transition: opacity .3s;
+}
+.today[hidden] { display: none; }
+.is-booting .today { opacity: 0; }
+.today-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.today-label { margin: 0; display: flex; align-items: center; gap: 14px; color: var(--ink); flex-wrap: wrap; }
+.today-label svg.dot-today { height: 15px; }
+.today-date { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.today-date svg.dot, .today-date .dot-fallback { height: 12px; }
+.today-dow-ja { font-size: 12px; }
+.today-link { color: var(--ink); text-decoration: none; flex: none; }
+.today-link svg.dot-cta { height: 10px; }
+.today-link:hover, .today-link:focus-visible { color: var(--glow-hover); outline: none; }
+.today-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.today-row {
+  --c: #1f7a5a;
+  display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 12px;
+  background: var(--card); color: var(--text);
+}
+.cat-normal { --c: #1f7a5a; } .cat-exam { --c: #c0394b; } .cat-oral { --c: #b7791f; } .cat-event { --c: #2b7bb0; }
+.today-per { display: flex; align-items: baseline; gap: 3px; color: var(--ink); }
+.today-per svg.dot-per { height: 20px; align-self: center; }
+.today-per-ja { font-size: 11px; color: var(--muted); }
+.today-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.today-title { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.today-sub { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.today-sub svg.dot-time { height: 10px; }
+.today-tags { display: flex; align-items: center; gap: 8px; }
+.today-pill {
+  font-size: 10.5px; font-weight: 700; line-height: 1; padding: 5px 9px; border-radius: 999px; white-space: nowrap;
+  color: var(--c); background: color-mix(in srgb, var(--c) 13%, #fff);
+}
+.today-state { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--ink); border: 1px solid var(--ink); border-radius: 999px; padding: 3px 8px; }
+.today-row.is-past { opacity: 0.5; }
+.today-row.is-next { border-color: var(--glow); border-left-color: var(--c); box-shadow: 0 0 0 3px rgba(31, 107, 82, 0.12); }
+.today-row.is-now {
+  color: #FFFFFF; background-color: var(--ink); border-color: var(--ink); border-left-color: var(--accent-on-dark);
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.4px);
+  background-size: 12px 12px;
+}
+.today-row.is-now .today-per, .today-row.is-now .today-per-ja { color: var(--accent-on-dark); }
+.today-row.is-now .today-sub { color: var(--on-dark); }
+.today-row.is-now .today-pill { color: #FFFFFF; background: rgba(255, 255, 255, 0.16); }
+.today-row.is-now .today-state { color: var(--accent-on-dark); border-color: var(--accent-on-dark); }
+.today-bar { display: flex; gap: 3px; margin-top: 2px; }
+.today-bar i { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
+.today-bar i.f { background: #FFFFFF; }
+.today-off { margin: 0; padding: 14px 4px; font-size: 17px; font-weight: 600; color: var(--ink); }
+.today-off span { display: block; margin-top: 3px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.today-done, .today-items, .today-tomorrow { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.today-items, .today-tomorrow { display: flex; gap: 12px; align-items: baseline; }
+.today-items svg.dot, .today-tomorrow svg.dot { height: 9px; align-self: center; flex: none; color: var(--ink); }
+.today-tomorrow { padding-top: 10px; border-top: 1px dashed var(--line); }
+@media (max-width: 520px) {
+  .today { padding: 14px 14px 12px; }
+  .today-row { grid-template-columns: 50px minmax(0, 1fr); }
+  .today-tags { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) { .today { transition: none; } }
