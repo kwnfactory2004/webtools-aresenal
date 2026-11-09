@@ -168,6 +168,16 @@ export async function initToday(doc = document, fetchImpl = fetch, nowFn = () =>
     el.hidden = true;
     return false;
   }
+  // 最初の1回だけ登場アニメーション（CSS の .is-intro）。最後に出る「明日」の行が終わったら外す＝1分ごとの作り直しでは動かない。
+  // 起動演出中（.is-booting）はCSS側で止まっているので、演出が終わってから始まる
+  if (el.classList && el.addEventListener) {
+    el.classList.add('is-intro');
+    el.addEventListener('animationend', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('today-tomorrow')) el.classList.remove('is-intro');
+    });
+    const guard = setTimeout(() => el.classList.remove('is-intro'), 20000);
+    if (guard && guard.unref) guard.unref(); // node のテストが終わるのを待たせない
+  }
   const draw = () => {
     try {
       el.innerHTML = renderToday(buildToday(data, nowFn()));
@@ -178,7 +188,8 @@ export async function initToday(doc = document, fetchImpl = fetch, nowFn = () =>
   };
   draw();
   // 授業中の「残り○分」と「今／次」を1分ごとに更新。タブに戻ってきたときにも更新
-  setInterval(draw, 60000);
+  const tick = setInterval(draw, 60000);
+  if (tick && tick.unref) tick.unref(); // node のテストが終わるのを待たせない（ブラウザでは何も起きない）
   if (doc.addEventListener) doc.addEventListener('visibilitychange', () => { if (doc.visibilityState === 'visible') draw(); });
   return true;
 }
