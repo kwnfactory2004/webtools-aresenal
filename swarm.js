@@ -590,6 +590,8 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
   const lite = !!view.lite;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+  // view.offsetY: 画面がスクロールした分だけ、絵ぜんたいをずらす（計画を作った時の位置のまま、ページに付いて動く）
+  if (view.offsetY) ctx.translate(0, view.offsetY);
   ctx.lineCap = 'butt';
   ctx.lineJoin = 'miter';
 
@@ -773,7 +775,8 @@ export function drawFrame(ctx, plan, tMs, view = {}) {
 // ---- 時計つきループ ----
 // canvas が null のときは描かずに時計だけ動かす（onTick / onReveal / onDone は同じ）。
 // 時間は rAF の差分で進め、タブが隠れている間は進めない。signal で即中止（onDone は呼ばない）。
-export function runSwarm({ canvas, plan, onReveal, onTick, onDone, onError, signal } = {}) {
+// followScroll: true なら、開始時のスクロール位置からの動きに合わせて絵を動かす（スクロールしながらでも、カードの上に出る）
+export function runSwarm({ canvas, plan, onReveal, onTick, onDone, onError, signal, followScroll = false } = {}) {
   let stopped = false;
   let raf = 0;
   let t = 0;
@@ -785,6 +788,8 @@ export function runSwarm({ canvas, plan, onReveal, onTick, onDone, onError, sign
   const minCount = essentialCount(plan);
   let ctx = null;
   let view = null;
+  const scrollNow = () => (typeof window !== 'undefined' ? (window.scrollY || 0) : 0);
+  const baseScroll = followScroll ? scrollNow() : 0;
 
   const fit = () => {
     if (!canvas) return;
@@ -837,7 +842,7 @@ export function runSwarm({ canvas, plan, onReveal, onTick, onDone, onError, sign
         return;
       }
       // 一度でも間引いたら、補助線・寸法ラベル・軌跡も省く（設計図の四角とハンドルは残る）
-      if (ctx) drawFrame(ctx, plan, t, { ...view, drawCount, lite: drawCount < plan.cursors.length });
+      if (ctx) drawFrame(ctx, plan, t, { ...view, drawCount, lite: drawCount < plan.cursors.length, offsetY: followScroll ? baseScroll - scrollNow() : 0 });
       raf = requestAnimationFrame(frame);
     } catch (e) {
       fail(e);

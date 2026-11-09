@@ -537,7 +537,7 @@ function runIntro(boot, cards, totalMs) {
       removeBoot(boot); // ヘッダー・ラベルの「起動中だけ隠す」もここで外れる
       if (focusWasInBoot) moveFocusToPage(cards);
       markVisited();
-      resolve();
+      resolve(mode);
     }
     function onKey(e) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -619,6 +619,19 @@ function miniFinish(canvas) {
   if (miniTimer) { clearTimeout(miniTimer); miniTimer = null; }
   miniCtrl = null;
   releaseCanvas(canvas);
+  drainMiniQueue();
+}
+
+// 見学ツアー中に、群れが動いている間に見えたカード。順番を待って、次の群れで作る（画面から外れたものは、すぐ普通に出す）
+let miniQueue = [];
+function drainMiniQueue() {
+  if (miniQueue.length === 0) return;
+  const list = miniQueue.filter((el) => !el.classList.contains('is-in'));
+  miniQueue = [];
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  const seen = list.filter((el) => isInViewport(el.getBoundingClientRect(), vh));
+  list.filter((el) => !seen.includes(el)).forEach(revealNow);
+  if (seen.length) setTimeout(() => revealBatch(seen), 0);
 }
 
 function revealBatch(els) {
@@ -631,6 +644,7 @@ function revealBatch(els) {
   };
   const canvas = document.getElementById('swarm');
   // 小さな群れは同時に1つだけ（同じ canvas を取り合わない）。動いている間の追加分は、群れ無しで従来通り登場
+  if (miniBusy && tourActive) { miniQueue.push(...els); return; }
   if (miniBusy || !canvasUsable(canvas)) { plain(els); return; }
   try {
     const group = els.slice(0, MINI_MAX_CARDS);
@@ -653,6 +667,7 @@ function revealBatch(els) {
       canvas,
       plan,
       signal: miniCtrl.signal,
+      followScroll: true, // スクロールしながらでも、カードの上に出る
       onReveal: ({ cardId }) => {
         const el = byId.get(cardId);
         if (el && !el.classList.contains('is-in')) revealCard(el);
@@ -694,6 +709,7 @@ function setupReveal(cards) {
     // 最後の砦: observer が一度も動かなくても、画面内のカードは隠れたままにしない
     setTimeout(() => {
       try {
+        if (miniBusy) return; // 小さな群れが動いている間は、そちらに任せる（observer は動いている）
         const vh = window.innerHeight || document.documentElement.clientHeight;
         pending.forEach((el) => {
           if (el.classList.contains('will-reveal') && !el.classList.contains('is-in') && isInViewport(el.getBoundingClientRect(), vh)) {
@@ -707,6 +723,80 @@ function setupReveal(cards) {
   } catch (e) {
     pending.forEach((el) => el.classList.remove('will-reveal'));
   }
+}
+
+// ---- 起動演出のあとの「見学ツアー」: 止まらずに、ゆっくり下までスクロール（見えたカードは、その場で短い登場で作られる）→ 一番下 → 最後に上へ戻る ----
+// 動きは「ゆっくり加速 → 一定の速さ → ゆっくり減速」の1本の流れ。群れの絵はスクロールに付いて動くので、止まらなくてもカードの上に出る。
+// 画面に触れたら（ホイール・タッチ・クリック・キー）その場でやめる（上には戻さない）。動きを減らす設定・スキップ・失敗のときは始めない。
+const TOUR_HOLD_MS = 700; // 演出が終わってから動き出すまで（今日の予定の帯が出始める間）
+const TOUR_DOWN_SPEED = 260; // 下へ: 1秒に進む px
+const TOUR_DOWN_MIN_MS = 2800;
+const TOUR_UP_SPEED = 750; // 上へ戻る: 1秒に進む px
+const TOUR_UP_MIN_MS = 1600;
+let tourActive = false;
+
+// 動かす時間（ms）。近すぎる（24px以内）なら 0＝動かさない
+export function tourDuration(distance, speed, minMs) {
+  const d = Math.abs(Number(distance)) || 0;
+  if (!(d > 24) || !(speed > 0)) return 0;
+  return Math.max(Number(minMs) || 0, Math.round((d / speed) * 1000));
+}
+
+// 台形の速さ（ゆっくり加速 → 一定 → ゆっくり減速）で、0〜1 の時間を 0〜1 の進み具合にする。途中で止まらない
+export function glideEase(k, ramp = 0.2) {
+  const t = Math.min(1, Math.max(0, Number(k) || 0));
+  const a = Math.min(0.5, Math.max(0.01, ramp));
+  const v = 1 / (1 - a);
+  if (t < a) return (v * t * t) / (2 * a);
+  if (t < 1 - a) return v * (a / 2 + (t - a));
+  return 1 - (v * (1 - t) * (1 - t)) / (2 * a);
+}
+
+function startTour() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cancelled = false;
+  const cancel = () => { cancelled = true; };
+  const events = ['wheel', 'touchstart', 'mousedown', 'keydown'];
+  events.forEach((n) => window.addEventListener(n, cancel, { capture: true, passive: true }));
+  tourActive = true;
+
+  const glide = (to, ms) => new Promise((resolve) => {
+    const from = window.scrollY || 0;
+    const t0 = performance.now();
+    const frame = (now) => {
+      if (cancelled) { resolve(false); return; }
+      const k = Math.min(1, (now - t0) / ms);
+      window.scrollTo(0, from + (to - from) * glideEase(k));
+      if (k < 1) requestAnimationFrame(frame); else resolve(true);
+    };
+    requestAnimationFrame(frame);
+  });
+  // 一番下に着いたら、最後の群れが終わるまで待つ（最大 3.5 秒）
+  const settle = async () => {
+    for (let i = 0; i < 35 && (miniBusy || miniQueue.length > 0) && !cancelled; i++) await sleep(100);
+    if (!cancelled) await sleep(500);
+  };
+
+  (async () => {
+    try {
+      await sleep(TOUR_HOLD_MS);
+      if (cancelled) return;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
+      const downMs = tourDuration(maxY - (window.scrollY || 0), TOUR_DOWN_SPEED, TOUR_DOWN_MIN_MS);
+      if (downMs === 0) return;
+      if (!(await glide(maxY, downMs))) return;
+      await settle();
+      if (cancelled) return;
+      await glide(0, tourDuration(maxY, TOUR_UP_SPEED, TOUR_UP_MIN_MS));
+    } catch (e) {
+      // 何があっても、ページはそのまま使える
+    } finally {
+      tourActive = false;
+      events.forEach((n) => window.removeEventListener(n, cancel, true));
+      drainMiniQueue(); // 待たせていたカードが残っていたら、すぐ出す
+    }
+  })();
 }
 
 export async function init() {
@@ -740,6 +830,7 @@ export async function init() {
   const { data, tools } = r.v;
   let cards = [];
   let safety = null;
+  let introMode = null;
   try {
     if (tools.length === 0) {
       grid.innerHTML = '<p class="empty">ツールがありません</p>';
@@ -756,12 +847,14 @@ export async function init() {
       // カードを描き終えて、演出を始める直前にだけヘッダー・ラベルを隠す（約150msでふっと消える）。
       // 外すのは removeBoot: runIntro の end()（完了・スキップ・中断・失敗）と、下の catch の forceAllVisible の両方から必ず通る
       setBooting(true);
-      await runIntro(boot, cards, bp.totalMs);
+      introMode = await runIntro(boot, cards, bp.totalMs);
     } else {
       removeBoot(boot);
     }
     markVisited();
     if (!instant && cards.length > 0) setupReveal(cards);
+    // 最後まで演出を見た（スキップ・スクロール・失敗ではない）ときだけ、下まで見学して上に戻る
+    if (introMode === 'done') startTour();
   } catch (e) {
     // どこで失敗しても、全カードが見える・#boot が無い状態にする
     forceAllVisible(boot, cards);
