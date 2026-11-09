@@ -1,6 +1,7 @@
 // Web Tools Arsenal - 描画用の関数（ブラウザ専用の処理は別途追加する）
 import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT } from './swarm.js';
 import { DOT_ICONS, dotIconSvg, dotSvg, dotText } from './dotfont.js';
+import { initToday } from './today.js';
 
 // アイコンは点で描いたドットアイコン（11×11。dotfont.js の DOT_ICONS）。名前は tools.json の icon と同じ
 export const ICONS = Object.fromEntries(Object.keys(DOT_ICONS).map((name) => [name, dotIconSvg(name)]));
@@ -773,5 +774,6 @@ export async function init() {
 
 if (typeof document !== 'undefined') {
   setupA2hs();
+  initToday(); // 一番上の「今日の学校の予定」。失敗しても帯が出ないだけで、他には影響しない
   init();
 }
