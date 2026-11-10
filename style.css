@@ -303,14 +303,14 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .today-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .today-row {
   --c: #1f7a5a;
-  display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 12px;
+  display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr) auto; align-items: center; column-gap: 20px; row-gap: 10px;
+  padding: 14px 20px 14px 18px; border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 12px;
   background: var(--card); color: var(--text);
 }
 .cat-normal { --c: #1f7a5a; } .cat-exam { --c: #c0394b; } .cat-oral { --c: #b7791f; } .cat-event { --c: #2b7bb0; }
-.today-per { display: flex; align-items: baseline; gap: 3px; color: var(--ink); }
+.today-per { display: flex; align-items: baseline; gap: 5px; color: var(--ink); }
 .today-per svg.dot-per { height: 20px; align-self: center; }
-.today-per-ja { font-size: 11px; color: var(--muted); }
+.today-per-ja { font-size: 12px; color: var(--muted); }
 .today-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .today-title { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .today-sub { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
@@ -342,8 +342,8 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .today-items svg.dot, .today-tomorrow svg.dot { height: 9px; align-self: center; flex: none; color: var(--ink); }
 .today-tomorrow { padding-top: 10px; border-top: 1px dashed var(--line); }
 @media (max-width: 520px) {
-  .today { padding: 14px 14px 12px; }
-  .today-row { grid-template-columns: 50px minmax(0, 1fr); }
+  .today { padding: 16px 16px 14px; }
+  .today-row { grid-template-columns: minmax(72px, auto) minmax(0, 1fr); column-gap: 16px; padding: 14px 16px 14px 16px; }
   .today-tags { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: reduce) { .today { transition: none; } }
@@ -370,3 +370,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .today.is-intro .today-tomorrow { animation: today-fade .5s ease-out 1.3s both; }
 .is-booting .today.is-intro, .is-booting .today.is-intro * { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .today.is-intro, .today.is-intro * { animation: none !important; } }
+
+/* 見学ツアー中（.is-touring）は、今日の予定の帯を隠しておく。上に戻ってくるころに外れて、登場アニメーションが始まる */
+.is-touring .today { opacity: 0; }
+.is-touring .today.is-intro, .is-touring .today.is-intro * { animation: none !important; }

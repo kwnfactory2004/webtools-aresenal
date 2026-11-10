@@ -1,5 +1,5 @@
 // Web Tools Arsenal - 描画用の関数（ブラウザ専用の処理は別途追加する）
-import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT } from './swarm.js';
+import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT, CARD_BUILD, cardBuildTotalMs } from './swarm.js';
 import { DOT_ICONS, dotIconSvg, dotSvg, dotText } from './dotfont.js';
 import { initToday } from './today.js';
 
@@ -467,6 +467,7 @@ function moveFocusToPage(cards) {
 }
 
 let activeIntroEnd = null; // 起動演出を今すぐ終える関数（動いていないときは null）
+let introRunning = false; // 起動演出の群れが動いている間 true（この間に見えたカードの小さな群れは、2枚目の canvas を使う）
 
 // 何があっても最後に「全カードが見える・#boot が無い」状態にする
 function forceAllVisible(boot, cards) {
@@ -500,6 +501,7 @@ function runIntro(boot, cards, totalMs) {
       if (!el.classList.contains('is-in') && !el.hasAttribute('tabindex')) { el.setAttribute('tabindex', '-1'); tabbed.push(el); }
     });
     activeIntroEnd = (mode) => end(mode);
+    introRunning = true;
     // 段階名はドット文字（状態バーは aria-hidden なので読み上げない）。中身は STAGE_TEXT の決まった文字だけ
     const setText = (t) => { if (text && t !== lastText) { text.innerHTML = dotSvg(t, { className: 'dot-stage', decorative: true }); lastText = t; } };
     const setCount = (t) => { if (countEl && t !== lastCount) { countEl.textContent = t; lastCount = t; } };
@@ -516,6 +518,8 @@ function runIntro(boot, cards, totalMs) {
       if (ended) return;
       ended = true;
       activeIntroEnd = null;
+      introRunning = false;
+      if (mode !== 'done') cancelTour(); // スキップ・中断・失敗のときは、見学ツアーも止める
       ctrl.abort();
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('click', onClick, true);
@@ -525,7 +529,10 @@ function runIntro(boot, cards, totalMs) {
       try {
         if (mode === 'skip' || mode === 'error') restoreAllTypings();
         const vh2 = window.innerHeight || document.documentElement.clientHeight;
-        const states = cards.map((el) => ({ revealed: el.classList.contains('is-in'), inView: isInViewport(el.getBoundingClientRect(), vh2) }));
+        // 見学ツアーで自動スクロール中は、画面に入ったカードを一斉に出さない（群れの順番待ちのカードは、1枚ずつ作られる）
+        const planned = new Set(byId.values());
+        const leaveToTour = (el) => tourDriving() && !planned.has(el);
+        const states = cards.map((el) => ({ revealed: el.classList.contains('is-in'), inView: isInViewport(el.getBoundingClientRect(), vh2) && !leaveToTour(el) }));
         cardsToRevealNow(states, mode).forEach(({ index, animate }) => {
           if (animate) revealCard(cards[index]); else revealNow(cards[index]);
         });
@@ -552,7 +559,7 @@ function runIntro(boot, cards, totalMs) {
       end('skip');
     }
     // 位置が変わると、飛んでいく先がずれる。止めて、見えているカードを出す
-    function onScroll() { if (Math.abs((window.scrollY || 0) - startScroll) > 24) end('interrupt'); }
+    function onScroll() { if (tourDriving()) return; if (Math.abs((window.scrollY || 0) - startScroll) > 24) end('interrupt'); } // 見学ツアーの自動スクロールでは止めない
     function onResize() {
       const w = window.innerWidth || document.documentElement.clientWidth;
       const h = window.innerHeight || document.documentElement.clientHeight;
@@ -579,11 +586,16 @@ function runIntro(boot, cards, totalMs) {
       end('error');
       return;
     }
+    // カーソルが最初のカードの設計図を広げ始めたとき、同時にスクロール（見学ツアー）を始める
+    const firstCard = (plan.boxes || []).find((b) => b.kind === 'card');
+    const tourStartAt = firstCard ? firstCard.appearAt : totalMs * PHASE.scanEnd;
+    let tourStarted = false;
     canvas.hidden = false;
     runSwarm({
       canvas,
       plan,
       signal: ctrl.signal,
+      followScroll: true, // スクロールしても、群れの絵はカードに付いて動く
       onReveal: ({ cardId }) => {
         const el = byId.get(cardId);
         if (!el) return;
@@ -594,6 +606,7 @@ function runIntro(boot, cards, totalMs) {
         }
       },
       onTick: (t) => {
+        if (!tourStarted && t >= tourStartAt) { tourStarted = true; startTour(); }
         const s = bootStage(t, totalMs);
         const st = statusAt(plan, t);
         setText(s.text);
@@ -635,6 +648,7 @@ function drainMiniQueue() {
 }
 
 function revealBatch(els) {
+  // 起動演出の群れが動いている間は、同じ canvas を取り合わないよう、2枚目（swarm2）で小さな群れを動かす
   const plain = (list) => {
     const delays = staggerDelays(list.length);
     list.forEach((el, i) => {
@@ -642,7 +656,7 @@ function revealBatch(els) {
       revealCard(el);
     });
   };
-  const canvas = document.getElementById('swarm');
+  const canvas = document.getElementById(introRunning ? 'swarm2' : 'swarm');
   // 小さな群れは同時に1つだけ（同じ canvas を取り合わない）。動いている間の追加分は、群れ無しで従来通り登場
   if (miniBusy && tourActive) { miniQueue.push(...els); return; }
   if (miniBusy || !canvasUsable(canvas)) { plain(els); return; }
@@ -657,8 +671,9 @@ function revealBatch(els) {
     });
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
-    const totalMs = 900 + 250 * (group.length - 1);
-    const plan = buildSwarmPlan({ targets, count: group.length * 3, totalMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false });
+    // どのカードも同じ時間・同じカーソルの速さで作る（枚数が増えても1枚あたりは変わらない）
+    const totalMs = cardBuildTotalMs(group.length);
+    const plan = buildSwarmPlan({ targets, count: Math.max(6, group.length * 3), totalMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false, uniform: CARD_BUILD });
     const flush = () => group.forEach((el) => { if (!el.classList.contains('is-in')) revealCard(el); });
     miniBusy = true;
     miniCtrl = new AbortController();
@@ -690,8 +705,9 @@ function revealBatch(els) {
 }
 
 // 群れのあと、まだ出ていないカード（画面の下にあったもの）は、画面に入った瞬間に登場させる。
-function setupReveal(cards) {
-  const pending = cards.filter((el) => !el.classList.contains('is-in'));
+function setupReveal(cards, skip = null) {
+  // skip: 起動演出の群れが作る部品（観察しない）
+  const pending = cards.filter((el) => !el.classList.contains('is-in') && !(skip && skip.has(el)));
   if (pending.length === 0) return;
   try {
     const io = new IntersectionObserver((entries) => {
@@ -725,15 +741,17 @@ function setupReveal(cards) {
   }
 }
 
-// ---- 起動演出のあとの「見学ツアー」: 止まらずに、ゆっくり下までスクロール（見えたカードは、その場で短い登場で作られる）→ 一番下 → 最後に上へ戻る ----
+// ---- 見学ツアー: 起動演出の群れが最初のカードを作り始めたと同時に、止まらずゆっくり下までスクロール（見えたカードは、その場で短い登場で作られる）→ 一番下 → 最後に上へ戻る ----
 // 動きは「ゆっくり加速 → 一定の速さ → ゆっくり減速」の1本の流れ。群れの絵はスクロールに付いて動くので、止まらなくてもカードの上に出る。
 // 画面に触れたら（ホイール・タッチ・クリック・キー）その場でやめる（上には戻さない）。動きを減らす設定・スキップ・失敗のときは始めない。
-const TOUR_HOLD_MS = 700; // 演出が終わってから動き出すまで（今日の予定の帯が出始める間）
+// 今日の予定の帯（TimeGrid）は、一番上に戻ってきたあと、最後に群れが作る（それまでは .is-touring で隠す）。
 const TOUR_DOWN_SPEED = 260; // 下へ: 1秒に進む px
 const TOUR_DOWN_MIN_MS = 2800;
 const TOUR_UP_SPEED = 750; // 上へ戻る: 1秒に進む px
 const TOUR_UP_MIN_MS = 1600;
 let tourActive = false;
+let tourCancelled = false;
+let tourCancel = null;
 
 // 動かす時間（ms）。近すぎる（24px以内）なら 0＝動かさない
 export function tourDuration(distance, speed, minMs) {
@@ -752,47 +770,104 @@ export function glideEase(k, ramp = 0.2) {
   return 1 - (v * (1 - t) * (1 - t)) / (2 * a);
 }
 
+// 今日の予定の帯の設計図: 外枠＋中の部品（ラベル・リンク・授業の行・持ち物・明日）
+function describeBanner(el) {
+  const target = { id: 'today', kind: 'card', rect: toBox(el.getBoundingClientRect()) };
+  try {
+    target.parts = Array.from(el.querySelectorAll('.today-label, .today-link, .today-row, .today-off, .today-done, .today-items, .today-tomorrow'))
+      .map((n) => n.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map(toBox);
+  } catch (e) {
+    target.parts = [];
+  }
+  return target;
+}
+
+// 一番上に戻ってきたあと、最後に今日の予定の帯（TimeGrid）を、カーソルの群れが組み立てる。
+// 設計図の枠が広がり、部品が出て、帯が現れる（帯の登場アニメーションは .is-touring が外れた瞬間に始まる）。
+// canvas が使えない・失敗しても、帯は必ず出す
+function buildBannerFinale() {
+  return new Promise((resolve) => {
+    const root = document.documentElement;
+    const el = document.getElementById('today');
+    const canvas = document.getElementById('swarm');
+    let shown = false;
+    const show = () => { if (!shown) { shown = true; root.classList.remove('is-touring'); } };
+    if (!el || el.hidden || miniBusy || !canvasUsable(canvas)) { show(); resolve(); return; }
+    try {
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      // 帯も、ほかのカードと同じ時間・同じカーソルの速さで作る
+      const finaleMs = cardBuildTotalMs(1);
+      const plan = buildSwarmPlan({ targets: [describeBanner(el)], count: Math.max(10, Math.min(18, swarmCount({ w: vw, h: vh }))), totalMs: finaleMs, seed: randomSeed(), viewport: { w: vw, h: vh }, scan: false, uniform: CARD_BUILD });
+      miniBusy = true;
+      miniCtrl = new AbortController();
+      canvas.hidden = false;
+      const finish = () => { show(); miniFinish(canvas); resolve(); };
+      runSwarm({ canvas, plan, signal: miniCtrl.signal, followScroll: true, onReveal: show, onDone: finish, onError: finish });
+      // 念のため: 何かで動かなくても、帯は隠れたままにしない
+      miniTimer = setTimeout(() => { miniTimer = null; if (miniCtrl) miniCtrl.abort(); finish(); }, finaleMs + 800);
+    } catch (e) {
+      show();
+      miniFinish(canvas);
+      resolve();
+    }
+  });
+}
+
+const tourDriving = () => tourActive && !tourCancelled; // 自動スクロール中（ユーザーがまだ触っていない）
+function cancelTour() { if (tourCancel) tourCancel(); }
+
 function startTour() {
+  if (tourActive) return;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  let cancelled = false;
-  const cancel = () => { cancelled = true; };
+  const root = document.documentElement;
+  let released = false;
+  const release = () => { if (!released) { released = true; root.classList.remove('is-touring'); } };
+  const cancel = () => { tourCancelled = true; };
+  tourCancelled = false;
+  tourCancel = cancel;
+  tourActive = true;
+  root.classList.add('is-touring');
   const events = ['wheel', 'touchstart', 'mousedown', 'keydown'];
   events.forEach((n) => window.addEventListener(n, cancel, { capture: true, passive: true }));
-  tourActive = true;
 
-  const glide = (to, ms) => new Promise((resolve) => {
+  const glide = (to, ms, onProgress) => new Promise((resolve) => {
     const from = window.scrollY || 0;
     const t0 = performance.now();
     const frame = (now) => {
-      if (cancelled) { resolve(false); return; }
+      if (tourCancelled) { resolve(false); return; }
       const k = Math.min(1, (now - t0) / ms);
       window.scrollTo(0, from + (to - from) * glideEase(k));
+      if (onProgress) onProgress(k);
       if (k < 1) requestAnimationFrame(frame); else resolve(true);
     };
     requestAnimationFrame(frame);
   });
-  // 一番下に着いたら、最後の群れが終わるまで待つ（最大 3.5 秒）
+  // 一番下に着いたら、起動演出の群れ・最後の小さな群れが終わるまで待つ（最大 14 秒）
   const settle = async () => {
-    for (let i = 0; i < 35 && (miniBusy || miniQueue.length > 0) && !cancelled; i++) await sleep(100);
-    if (!cancelled) await sleep(500);
+    for (let i = 0; i < 140 && (introRunning || miniBusy || miniQueue.length > 0) && !tourCancelled; i++) await sleep(100);
+    if (!tourCancelled) await sleep(500);
   };
 
   (async () => {
     try {
-      await sleep(TOUR_HOLD_MS);
-      if (cancelled) return;
       const vh = window.innerHeight || document.documentElement.clientHeight;
       const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
       const downMs = tourDuration(maxY - (window.scrollY || 0), TOUR_DOWN_SPEED, TOUR_DOWN_MIN_MS);
       if (downMs === 0) return;
       if (!(await glide(maxY, downMs))) return;
       await settle();
-      if (cancelled) return;
-      await glide(0, tourDuration(maxY, TOUR_UP_SPEED, TOUR_UP_MIN_MS));
+      if (tourCancelled) return;
+      const back = await glide(0, tourDuration(maxY, TOUR_UP_SPEED, TOUR_UP_MIN_MS));
+      if (back && !tourCancelled) await buildBannerFinale(); // 最後に、TimeGrid の帯を作る
     } catch (e) {
       // 何があっても、ページはそのまま使える
     } finally {
+      release();
       tourActive = false;
+      tourCancel = null;
       events.forEach((n) => window.removeEventListener(n, cancel, true));
       drainMiniQueue(); // 待たせていたカードが残っていたら、すぐ出す
     }
@@ -830,7 +905,7 @@ export async function init() {
   const { data, tools } = r.v;
   let cards = [];
   let safety = null;
-  let introMode = null;
+  let earlyReveal = false;
   try {
     if (tools.length === 0) {
       grid.innerHTML = '<p class="empty">ツールがありません</p>';
@@ -846,15 +921,16 @@ export async function init() {
       safety = setTimeout(() => { if (activeIntroEnd) activeIntroEnd('error'); }, bp.totalMs + 4000);
       // カードを描き終えて、演出を始める直前にだけヘッダー・ラベルを隠す（約150msでふっと消える）。
       // 外すのは removeBoot: runIntro の end()（完了・スキップ・中断・失敗）と、下の catch の forceAllVisible の両方から必ず通る
+      // 画面の下にあるカードは、スクロールで見えた瞬間に作る。起動演出（スクロールしながら）の間も動かすので、演出の前に観察を始める
+      setupReveal(cards, new Set(introElements()));
+      earlyReveal = true;
       setBooting(true);
-      introMode = await runIntro(boot, cards, bp.totalMs);
+      await runIntro(boot, cards, bp.totalMs);
     } else {
       removeBoot(boot);
     }
     markVisited();
-    if (!instant && cards.length > 0) setupReveal(cards);
-    // 最後まで演出を見た（スキップ・スクロール・失敗ではない）ときだけ、下まで見学して上に戻る
-    if (introMode === 'done') startTour();
+    if (!instant && cards.length > 0 && !earlyReveal) setupReveal(cards);
   } catch (e) {
     // どこで失敗しても、全カードが見える・#boot が無い状態にする
     forceAllVisible(boot, cards);
