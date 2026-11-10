@@ -24,6 +24,17 @@ export const PHASE = {
 // スクロールで入ったカード用の短い版（赤い線・渦なし）
 export const MINI = { layout0: 0.22, layout1: 0.62, reveal: 0.06, ready: 0.72, fade: 0.25, exit: 0.16, leaveJitter: 0.05 };
 
+// スクロールで見えたカード・最後の帯を作る群れの「1枚あたりの時間」。どのカードも同じ長さ・同じ間隔にそろえる（起動演出のカードとほぼ同じ:
+// 設計図が広がる450ms → 中身が出るまで350ms → 設計図が消えるまで630ms。カーソルの速さも起動演出と同じ）
+export const CARD_BUILD = { leadMs: 150, growMs: 450, revealMs: 350, fadeMs: 630, staggerMs: 316 };
+
+// n枚のカードを CARD_BUILD で作る群れの全体の長さ（ms）。枚数が増えても、1枚あたりの時間は変わらず、始まる時刻だけが staggerMs ずつ遅れる
+export function cardBuildTotalMs(n) {
+  const k = Math.max(1, Math.floor(Number(n)) || 1);
+  const lastFadeEnd = CARD_BUILD.leadMs + CARD_BUILD.staggerMs * (k - 1) + CARD_BUILD.growMs + CARD_BUILD.revealMs + CARD_BUILD.fadeMs;
+  return Math.ceil(lastFadeEnd / MINI.ready);
+}
+
 export const STAGE_TEXT = { scan: 'SCANNING PAGE...', layout: 'BUILDING LAYOUT', fill: 'FILLING CONTENT', ready: 'READY' };
 export const AGENT_COLORS = ['#0F382C', '#0E9AA7', '#2F6FDE', '#D6467F', '#7B55D9'];
 
@@ -118,7 +129,8 @@ function lineTimeAt(T, W, x) {
 //             descEnd?:{x,y}, typing?:{titleMs,totalMs} }]（表示順）
 // scan=true: 起動のフル版（渦・赤い前線あり）。scan=false: スクロール登場の短い版。
 // 戻り値: { seed, totalMs, viewport, scan, readyAt, lineStart, lineEnd, boxes, cursors, reveals }
-export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, seed = 1, viewport, scan = true } = {}) {
+// uniform: CARD_BUILD を渡すと（scan=false のとき）、どのカードも同じ時間（始まりだけ staggerMs ずつ遅れる）・起動演出と同じカーソルの速さで作る
+export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, seed = 1, viewport, scan = true, uniform = null } = {}) {
   const T = Math.max(300, Number(totalMs) || BASE_MS);
   const W = Math.max(100, Number(viewport && viewport.w) || 1280);
   const H = Math.max(100, Number(viewport && viewport.h) || 800);
@@ -129,7 +141,8 @@ export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, se
   });
   const n = list.length;
   const rnd = mulberry32(seed);
-  const scale = clamp(T / BASE_MS, 0.12, 1);
+  const U = !scan && uniform && typeof uniform === 'object' ? { ...CARD_BUILD, ...uniform } : null;
+  const scale = U ? 1 : clamp(T / BASE_MS, 0.12, 1); // 時間をそろえる版は、カーソルも起動演出と同じ速さ（scale=1）
   const N = Math.max(0, Math.floor(Number(count)) || 0);
   const cx = W / 2;
   const cy = H / 2;
@@ -157,12 +170,16 @@ export function buildSwarmPlan({ targets = [], count = 32, totalMs = BASE_MS, se
   const span = Math.max(0, L1 - L0 - grow);
   const boxes = list.map((tg, i) => {
     const r = { x: tg.rect.x, y: tg.rect.y, w: Math.max(0, tg.rect.w), h: Math.max(0, tg.rect.h) };
-    const appearAt = L0 + (n > 1 ? (span * i) / (n - 1) : 0);
-    const growEnd = appearAt + grow;
-    const revealAt = isScan
-      ? Math.max(growEnd, lineTimeAt(T, W, r.x) + Math.min(rowOf[i] * rowStep[i], PHASE.rowShift * T))
-      : growEnd + MINI.reveal * T;
-    const fadeEnd = Math.max(revealAt + 1, Math.min(revealAt + (isScan ? PHASE.fade : MINI.fade) * T, 0.95 * T));
+    const appearAt = U ? U.leadMs + U.staggerMs * i : L0 + (n > 1 ? (span * i) / (n - 1) : 0);
+    const growEnd = appearAt + (U ? U.growMs : grow);
+    const revealAt = U
+      ? growEnd + U.revealMs
+      : isScan
+        ? Math.max(growEnd, lineTimeAt(T, W, r.x) + Math.min(rowOf[i] * rowStep[i], PHASE.rowShift * T))
+        : growEnd + MINI.reveal * T;
+    const fadeEnd = U
+      ? revealAt + U.fadeMs
+      : Math.max(revealAt + 1, Math.min(revealAt + (isScan ? PHASE.fade : MINI.fade) * T, 0.95 * T));
     const kind = tg.kind === 'label' ? 'label' : 'card';
     const parts = (Array.isArray(tg.parts) ? tg.parts : []).filter(finiteBox).map((p, k) => {
       const a = growEnd + k * 70 * scale;
