@@ -2,6 +2,7 @@
 import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_TEXT, CARD_BUILD, cardBuildTotalMs } from './swarm.js';
 import { DOT_ICONS, dotIconSvg, dotSvg, dotText } from './dotfont.js';
 import { initToday } from './today.js';
+import { runExcelIntro } from './excel-intro.js';
 
 // アイコンは点で描いたドットアイコン（11×11。dotfont.js の DOT_ICONS）。名前は tools.json の icon と同じ
 export const ICONS = Object.fromEntries(Object.keys(DOT_ICONS).map((name) => [name, dotIconSvg(name)]));
@@ -883,7 +884,8 @@ export async function init() {
   const bp = bootPlan({ visited, reducedMotion: wantsReducedMotion() });
   // 動きを減らす設定／IntersectionObserver が無い／canvas が使えない: 演出なし（群れも設計図も無く、全カードをすぐ見せる）
   const instant = shouldRevealNow(window) || !canvasUsable(document.getElementById('swarm'));
-  const useBoot = !!boot && bp.show && !instant;
+  const useExcel = bp.show && !instant; // 試作: 起動演出は Excel 風（excel-intro.js）。従来の #boot は使わない
+  const useBoot = false;
   if (boot) {
     // ヘッダーを隠す .is-booting はまだ付けない（tools.json の読み込みが遅くても、ヘッダーは見えたまま）
     if (useBoot) boot.hidden = false;
@@ -916,16 +918,25 @@ export async function init() {
 
     cards = Array.from(document.querySelectorAll('#grid .card, #links .card'));
     if (!instant) cards.forEach((el) => el.classList.add('will-reveal'));
-    if (useBoot && cards.length > 0) {
-      // 保険: 演出の想定終了（totalMs）＋余裕のあとも終わっていなければ、強制的に終える
-      safety = setTimeout(() => { if (activeIntroEnd) activeIntroEnd('error'); }, bp.totalMs + 4000);
-      // カードを描き終えて、演出を始める直前にだけヘッダー・ラベルを隠す（約150msでふっと消える）。
-      // 外すのは removeBoot: runIntro の end()（完了・スキップ・中断・失敗）と、下の catch の forceAllVisible の両方から必ず通る
-      // 画面の下にあるカードは、スクロールで見えた瞬間に作る。起動演出（スクロールしながら）の間も動かすので、演出の前に観察を始める
-      setupReveal(cards, new Set(introElements()));
+    if (useExcel && cards.length > 0) {
+      // 今日の予定の帯が出てから測る（帯が遅れて出ると、カードの位置がずれるため）
+      await new Promise((res) => {
+        const t0 = Date.now();
+        const tick = () => {
+          const el = document.getElementById('today');
+          if (!el || !el.hidden || Date.now() - t0 > 1200) res(); else setTimeout(tick, 50);
+        };
+        tick();
+      });
       earlyReveal = true;
-      setBooting(true);
-      await runIntro(boot, cards, bp.totalMs);
+      setBooting(true); // ヘッダーの文字・ラベル・今日の帯を、AIが作るまで隠す
+      await runExcelIntro({
+        revealCard,
+        revealNow,
+        setBooting,
+        // 画面の下にあるカードは、これまでどおり「見えた瞬間に登場」。Excelで作るカードは観察しない
+        onPlan: (els) => setupReveal(cards, new Set(els)),
+      });
     } else {
       removeBoot(boot);
     }
