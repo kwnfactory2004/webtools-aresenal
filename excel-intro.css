@@ -1,8 +1,6 @@
 /* Excelオープニング（試作）。本番のページの上に、方眼と数式バーとAIカーソルを重ねる。ページ本体の見た目は触らない */
 html.xl-on { overflow: hidden; }
-/* 数式バー(36)＋列の見出し(28)＝64px、行の見出し28px のぶん、ページを下・右へずらしておく（終わりにすっと元へ戻る） */
-html.xl-on body { transform: translate(14px, 64px); }
-html.xl-settle body { transition: transform .6s ease; }
+/* ページはずらさない。方眼と数式バー（ヘッダーの上の余白に収まる高さ）を上に重ねるだけ */
 /* 深緑のヘッダー帯は、AIが作り終えるまで透明にしておく（作り終えたらふわっと出る） */
 .site-header { transition: background-color .5s ease; }
 html.xl-on:not(.xl-band-on) .site-header { background-color: transparent; background-image: none; }
@@ -10,7 +8,7 @@ html.xl-on:not(.xl-band-on) .site-header { background-color: transparent; backgr
 #xl-lines {
   position: fixed; inset: 0; z-index: -1; background-color: #fff;
   background-image: linear-gradient(to right, #dfe5e1 1px, transparent 1px), linear-gradient(to bottom, #dfe5e1 1px, transparent 1px);
-  background-size: 120px 32px; background-position: 28px 64px;
+  background-size: 120px 32px; background-position: 0 0;
   transition: opacity .8s;
 }
 #xl-lines.xl-fade { opacity: 0; }
@@ -24,13 +22,6 @@ html.xl-on:not(.xl-band-on) .site-header { background-color: transparent; backgr
 .xl-fbar { padding: 0 10px; white-space: pre; }
 .xl-fbar::after { content: ""; display: inline-block; width: 1px; height: 1em; background: #111; margin-left: 1px; vertical-align: -2px; animation: xl-blink 1s steps(1) infinite; }
 @keyframes xl-blink { 50% { opacity: 0; } }
-.xl-colheads { position: absolute; left: 28px; right: 0; top: 36px; height: 28px; display: flex; overflow: hidden; background: #f1f3f1; }
-.xl-colheads div { flex: 0 0 120px; text-align: center; line-height: 28px; border-right: 1px solid #d9ddd9; border-bottom: 1px solid #d9ddd9; font-size: 12px; color: #555; transition: background .2s, color .2s; }
-.xl-corner { position: absolute; left: 0; top: 36px; width: 28px; height: 28px; background: #f1f3f1; border-right: 1px solid #d9ddd9; border-bottom: 1px solid #d9ddd9; }
-.xl-rowheads { position: absolute; left: 0; top: 64px; bottom: 0; width: 28px; overflow: hidden; background: #f1f3f1; }
-.xl-rowinner { will-change: transform; }
-.xl-rowinner > div { height: 32px; line-height: 32px; text-align: center; border-bottom: 1px solid #d9ddd9; border-right: 1px solid #d9ddd9; font-size: 11px; color: #555; transition: background .2s, color .2s; }
-.xl-colheads div.on, .xl-rowinner > div.on { background: #0F382C; color: #fff; }
 
 .xl-stage { position: absolute; left: 0; top: 0; width: 100%; overflow: hidden; pointer-events: none; z-index: 9000; }
 .xl-block { position: absolute; z-index: 1; border-radius: 14px; border: 1px solid var(--wc); opacity: 0;
