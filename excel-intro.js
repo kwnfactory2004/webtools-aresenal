@@ -9,8 +9,8 @@ const AGENTS = [
   { color: '#8B4FD0', label: 'AGENT 5', f: 0.7 },
   { color: '#D6336C', label: 'AGENT 6', f: 0.7 },
 ];
-const CW = 120, CH = 32, HEAD_W = 28, TOP = 64;
-const SX = 14, SY = 64;   // 作っている間、ページを右・下へずらす量（CSS の html.xl-on body と同じ）
+const CW = 120, CH = 32;
+const SX = 0, SY = 0;     // ページはずらさない（方眼・数式バーは上に重ねるだけ）
 const TYPE_MS = 360;      // セルに名前を打つ時間（ミリ秒）。カード・ラベルで共通
 const STEP_MS = 500;      // 上から順に、部品を作り始める間隔
 const SCROLL_TAU_MS = 260; // スクロールが目標へ追いつく早さ（小さいほど速い）
@@ -79,10 +79,6 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
   const namebox = mk('span', 'xl-namebox', formula); namebox.textContent = 'A1';
   mk('span', 'xl-fx', formula).textContent = 'fx';
   const fbar = mk('span', 'xl-fbar', formula);
-  mk('div', 'xl-corner', chrome);
-  const colheads = mk('div', 'xl-colheads', chrome);
-  const rowheads = mk('div', 'xl-rowheads', chrome);
-  const rowInner = mk('div', 'xl-rowinner', rowheads);
   const stage = mk('div', 'xl-stage', document.body);   // ページと一緒にスクロールする（ページの上の座標で置く）
   const btns = mk('div', 'xl-btns', xl);
   const skipBtn = mk('button', '', btns); skipBtn.type = 'button'; skipBtn.textContent = 'スキップ';
@@ -107,8 +103,7 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
   let sy = 0, target = 0, maxScroll = 0, scrollTimer = 0, lastTick = 0;
   const applyScroll = () => {
     window.scrollTo(0, sy);
-    lines.style.backgroundPosition = HEAD_W + 'px ' + (TOP - sy) + 'px';
-    rowInner.style.transform = 'translateY(' + (-sy) + 'px)';
+    lines.style.backgroundPosition = '0px ' + (-sy) + 'px';
   };
   const tick = () => {
     const now = performance.now(), dt = Math.min(100, now - lastTick); lastTick = now;
@@ -131,28 +126,15 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
   };
   const click = async (wk) => { wk.cur.classList.add('click'); await sleep(120 * wk.f); wk.cur.classList.remove('click'); };
 
-  // 見出し（A B C / 1 2 3）：どれかのAIが選んでいる所を光らせる
-  function updateHeads() {
-    const act = agents.filter((w) => w.rect);
-    [...colheads.children].forEach((e, i) => {
-      const a = HEAD_W - SX + i * CW, b = a + CW;
-      e.classList.toggle('on', act.some((w) => w.rect.x < b && w.rect.x + w.rect.w > a));
-    });
-    [...rowInner.children].forEach((e, i) => {
-      const a = i * CH, b = a + CH;
-      e.classList.toggle('on', act.some((w) => w.rect.y < b && w.rect.y + w.rect.h > a));
-    });
-  }
   function setSel(wk, r) {
     wk.sel.style.setProperty('--sp', wk.f);
     place(wk.sel, r);
     wk.sel.classList.remove('hide');
     wk.rect = r;
-    updateHeads();
-    const col = Math.max(0, Math.floor((r.x - (HEAD_W - SX)) / CW)), row = Math.max(0, Math.floor(r.y / CH)) + 1;
+    const col = Math.max(0, Math.floor(r.x / CW)), row = Math.max(0, Math.floor(r.y / CH)) + 1;
     namebox.textContent = letters(col) + row;
   }
-  function endSel(wk) { wk.sel.classList.add('hide'); wk.rect = null; updateHeads(); }
+  function endSel(wk) { wk.sel.classList.add('hide'); wk.rect = null; }
 
   async function typeInto(el, text, delay) {
     if (skipped) { el.textContent = text; fbar.textContent = text; return; }
@@ -253,13 +235,9 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
     jobs = planJobs();
     onPlan(jobs.filter((j) => j.kind === 'card').map((j) => j.el));
 
-    // 方眼・行の見出しを、ページ全体の高さぶん用意する
     const docH = document.documentElement.scrollHeight;
     maxScroll = Math.max(0, docH - innerHeight);
     stage.style.height = docH + 'px';
-    const nc = Math.ceil((innerWidth - HEAD_W) / CW) + 1, nr = Math.ceil(docH / CH) + 2;
-    for (let i = 0; i < nc; i++) mk('div', '', colheads).textContent = letters(i);
-    for (let i = 0; i < nr; i++) mk('div', '', rowInner).textContent = String(i + 1);
     applyScroll();
 
     agents.forEach((wk, i) => { const [x, y] = edgeDoc(i, 0); moveCursor(wk, x, y, 0); });
@@ -300,7 +278,7 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
     }
     await Promise.all(running);
 
-    // 仕上げ: 一番上へスクロールで戻りながらカーソルが去る → 方眼・見出しを消して、ページを元の位置へすっと戻す
+    // 仕上げ: 一番上へスクロールで戻りながらカーソルが去る → 方眼と数式バーがすっと消える
     target = 0;
     agents.forEach((wk, idx) => { const [x, y] = edgeDoc(idx, 0); moveCursor(wk, x, y, 0.9); });
     await sleep(1300);
@@ -309,7 +287,6 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
     xl.classList.add('xl-fade'); lines.classList.add('xl-fade');
     await sleep(700);
     sy = 0; target = 0; applyScroll();
-    root.classList.add('xl-settle');
     root.classList.remove('xl-on');
     setBooting(false);                    // 今日の予定の帯が、ここで登場する
     jobs.forEach((j) => { if (j.block) { j.block.classList.add('gone'); } });
