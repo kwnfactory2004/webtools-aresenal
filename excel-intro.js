@@ -91,7 +91,7 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
   const agents = AGENTS.map((def) => {
     const cur = mk('div', 'xl-cursor hide', stage);
     cur.style.setProperty('--wc', def.color);
-    cur.innerHTML = '<svg viewBox="0 0 20 24" aria-hidden="true"><path d="M1 1 L1 18 L5.5 14 L8.8 21.5 L11.6 20.3 L8.3 13 L14 13 Z"/></svg><span class="tag"></span>';
+    cur.innerHTML = '<div class="xl-in"><svg viewBox="0 0 20 24" aria-hidden="true"><path d="M1 1 L1 18 L5.5 14 L8.8 21.5 L11.6 20.3 L8.3 13 L14 13 Z"/></svg><span class="tag"></span></div>';
     cur.querySelector('.tag').textContent = def.label;
     const sel = mk('div', 'xl-sel hide', stage);
     sel.style.setProperty('--wc', def.color);
@@ -119,10 +119,10 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
     const [x, y] = [[W - 100, H * 0.3], [W - 80, H - 90], [W * 0.5, H - 70], [W * 0.15, H - 100], [W - 300, H * 0.6], [W * 0.3, H - 60]][i];
     return [x - SX, y - SY + scrollY];
   };
+  // 動かすのは transform だけ（left/top を動かすと、スマホで残像が出たため）
   const moveCursor = (wk, x, y, d) => {
     wk.cur.style.setProperty('--cd', d + 's');
-    wk.cur.style.left = x + 'px';
-    wk.cur.style.top = y + 'px';
+    wk.cur.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
   };
   const click = async (wk) => { wk.cur.classList.add('click'); await sleep(120 * wk.f); wk.cur.classList.remove('click'); };
 
