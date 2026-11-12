@@ -374,3 +374,4 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 /* 見学ツアー中（.is-touring）は、今日の予定の帯を隠しておく。上に戻ってくるころに外れて、登場アニメーションが始まる */
 .is-touring .today { opacity: 0; }
 .is-touring .today.is-intro, .is-touring .today.is-intro * { animation: none !important; }
+.today-trip { font-weight: 700; font-size: 14px; margin: 0 0 8px; color: var(--c, #0F382C); }
