@@ -13,6 +13,7 @@ const CATEGORY = {
   event: { cls: 'cat-event', label: '行事' },
 };
 export const BAR_SEGMENTS = 10;
+const TRIP_KIND = { meet: '集合・解散', move: '移動', rest: '休憩', visit: '見学・観光', free: '自由時間' };
 
 export function escapeHtml(text) {
   return String(text ?? '')
@@ -48,6 +49,8 @@ export function dayStatus(data, date) {
   const holiday = data.holidays[key] || '';
   const dow = date.getDay();
   const belongings = (data.belongings && data.belongings[key]) || [];
+  const trip = (data.trips && data.trips[key]) || null;
+  if (trip && Array.isArray(trip.stops) && trip.stops.length > 0) return { kind: 'trip', label: trip.title, items, belongings, key, trip };
   if (items.length > 0) return { kind: 'class', label: '', items, belongings, key };
   if (holiday) return { kind: 'holiday', label: `祝日（${holiday}）`, items, belongings, key };
   if (key >= data.winter.from && key <= data.winter.to) return { kind: 'winter', label: '冬休み', items, belongings, key };
@@ -81,6 +84,38 @@ export function buildRows(data, items, nowMin) {
   return rows;
 }
 
+// 研修旅行などの行程: [{t:"11:00〜12:00"|"10:30", label, kind, note}] → 開始・終了（分）と 済み／今／次 をつける。
+// 終わりの時刻が無い行は、次の行の開始まで（最後の行は 24:00 まで）
+export function buildTripRows(stops, nowMin) {
+  const toMin = (x) => { const m = String(x).match(/^(\d{1,2}):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const rows = [];
+  stops.forEach((st, i) => {
+    const [a, b] = String(st.t).split('〜');
+    const start = toMin(a);
+    if (start == null) return;
+    const nextStart = stops[i + 1] ? toMin(String(stops[i + 1].t).split('〜')[0]) : 24 * 60;
+    const end = b ? toMin(b) : (nextStart ?? start + 30);
+    rows.push({ start, end: end ?? start + 30, hasEnd: Boolean(b), label: st.label, kind: st.kind, note: st.note || '' });
+  });
+  let nextDone = false;
+  for (const row of rows) {
+    if (nowMin == null) { row.state = 'later'; continue; }
+    if (nowMin >= row.end) row.state = 'past';
+    else if (nowMin >= row.start) row.state = 'now';
+    else if (!nextDone) { row.state = 'next'; nextDone = true; }
+    else row.state = 'later';
+  }
+  return rows;
+}
+
+// 画面に出す行を絞る: 今・次・その次。まだ始まっていなければ最初の3つ。全部終わっていれば空
+export function pickTripRows(rows) {
+  const first = rows.findIndex((r) => r.state === 'now' || r.state === 'next');
+  if (first < 0) return [];
+  const from = rows[first].state === 'next' && first > 0 && rows[first - 1].state === 'past' ? first : first;
+  return rows.slice(from, from + 3);
+}
+
 // 画面に出す内容。now は Date
 export function buildToday(data, now) {
   const status = dayStatus(data, now);
@@ -89,13 +124,17 @@ export function buildToday(data, now) {
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const ts = dayStatus(data, tomorrow);
   const tRows = buildRows(data, ts.items, null);
-  const tomorrowText = ts.kind === 'class'
+  const tripRows = status.trip ? buildTripRows(status.trip.stops, nowMin) : null;
+  const tomorrowText = ts.kind === 'trip'
+    ? ts.label
+    : ts.kind === 'class'
     ? tRows.map((r) => `${r.from === r.to ? r.from : r.from + '〜' + r.to}限 ${r.title}`).join(' ／ ')
     : ts.label;
   return {
     date: now,
     status,
     rows,
+    tripRows,
     nowMin,
     tomorrow: { key: ts.key, text: tomorrowText, kind: ts.kind, dow: tomorrow.getDay() },
   };
@@ -125,6 +164,22 @@ function renderRow(row, nowMin) {
   </li>`;
 }
 
+function renderTripRow(row, nowMin) {
+  const stateLabel = { now: 'NOW', next: 'NEXT' }[row.state] || '';
+  const kindLabel = TRIP_KIND[row.kind] || '移動';
+  const range = row.hasEnd ? `${fmtTime(row.start)}-${fmtTime(row.end)}` : fmtTime(row.start);
+  const remain = row.state === 'now' && row.hasEnd ? `<span class="today-remain">残り ${row.end - nowMin} 分</span>` : '';
+  return `<li class="today-row is-${row.state} cat-event">
+    <span class="today-per">${dotSvg(fmtTime(row.start), { className: 'dot-per', dot: 0.95 })}</span>
+    <span class="today-main">
+      <span class="today-title">${escapeHtml(row.label)}</span>
+      <span class="today-sub">${dotSvg(range, { className: 'dot-time', dot: 0.95 })}${remain}${row.note ? `<span class="today-remain">${escapeHtml(row.note)}</span>` : ''}</span>
+      ${row.state === 'now' && row.hasEnd ? bar(row, nowMin) : ''}
+    </span>
+    <span class="today-tags">${stateLabel ? `<span class="today-state">${stateLabel}</span>` : ''}<span class="today-pill cat-event">${escapeHtml(kindLabel)}</span></span>
+  </li>`;
+}
+
 // 帯の中身（HTML文字列）
 export function renderToday(vm) {
   const d = vm.date;
@@ -134,7 +189,12 @@ export function renderToday(vm) {
   </div>`;
 
   let body;
-  if (vm.status.kind === 'class') {
+  if (vm.status.kind === 'trip') {
+    const shown = pickTripRows(vm.tripRows || []);
+    body = `<p class="today-trip">${escapeHtml(vm.status.label)}</p>` + (shown.length > 0
+      ? `<ul class="today-list">${shown.map((r) => renderTripRow(r, vm.nowMin)).join('')}</ul>`
+      : '<p class="today-done">今日の行程は終わりました</p>');
+  } else if (vm.status.kind === 'class') {
     const done = vm.rows.length > 0 && vm.rows.every((r) => r.state === 'past');
     body = `<ul class="today-list">${vm.rows.map((r) => renderRow(r, vm.nowMin)).join('')}</ul>${done ? '<p class="today-done">今日の授業は終わりました</p>' : ''}`;
     if (vm.status.belongings.length > 0) {
