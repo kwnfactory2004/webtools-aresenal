@@ -3,6 +3,7 @@ import { buildSwarmPlan, runSwarm, swarmCount, statusAt, stageOf, PHASE, STAGE_T
 import { DOT_ICONS, dotIconSvg, dotSvg, dotText } from './dotfont.js';
 import { initToday } from './today.js';
 import { runExcelIntro } from './excel-intro.js';
+import { playLogoIntro } from './logo-intro.js';
 
 // アイコンは点で描いたドットアイコン（11×11。dotfont.js の DOT_ICONS）。名前は tools.json の icon と同じ
 export const ICONS = Object.fromEntries(Object.keys(DOT_ICONS).map((name) => [name, dotIconSvg(name)]));
@@ -936,6 +937,8 @@ export async function init() {
         setBooting,
         // 画面の下にあるカードは、これまでどおり「見えた瞬間に登場」。Excelで作るカードは観察しない
         onPlan: (els) => setupReveal(cards, new Set(els)),
+        // 最初にKWNロゴが組み上がり、ヘッダーのロゴの位置へ飛んで着地する（そのあとAIカーソルが動き出す）
+        before: ({ isSkipped }) => playLogoIntro({ target: document.querySelector('.site-logo'), isSkipped }),
       });
     } else {
       removeBoot(boot);

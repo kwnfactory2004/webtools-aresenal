@@ -66,7 +66,7 @@ function planJobs() {
   return jobs;
 }
 
-export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan }) {
+export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan, before }) {
   const root = document.documentElement;
   let skipped = false;
   const sleep = (ms) => new Promise((r) => setTimeout(r, skipped ? 0 : ms));
@@ -243,6 +243,8 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan 
     agents.forEach((wk, i) => { const [x, y] = edgeDoc(i, 0); moveCursor(wk, x, y, 0); });
     lastTick = performance.now();
     scrollTimer = setInterval(tick, 16);
+    // 最初に差し込む演出（ロゴ起動演出など）。終わるまで AI カーソルは動かない。失敗しても本編は続ける
+    if (before) { try { await before({ isSkipped: () => skipped }); } catch (e) { /* 次へ */ } }
     await sleep(350);
 
     // 上の部品から順に、0.5秒おきに作り始める（ヘッダー・今日の帯・カードが1枠ずつ。ラベルは次の部品と同時）。

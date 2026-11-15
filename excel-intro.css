@@ -50,3 +50,6 @@ html.xl-instant body { transition: none !important; }
 .xl-btns { position: fixed; right: 12px; bottom: 12px; z-index: 9100; display: flex; gap: 8px; }
 .xl-btns button { font: inherit; font-size: 12px; padding: 8px 14px; border: 1px solid #0F382C; background: #fff; color: #0F382C; border-radius: 999px; cursor: pointer; pointer-events: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .xl-btns button:hover { background: #0F382C; color: #fff; }
+
+/* ロゴ起動演出（logo-intro.js）: 白い画面の上にロゴを描く。クリックでスキップ */
+#logo-intro { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 9500; cursor: pointer; }
