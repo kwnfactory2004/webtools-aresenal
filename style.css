@@ -54,6 +54,10 @@ svg.dot { display: block; height: 1em; width: auto; flex: none; overflow: visibl
   flex: none; width: 64px; height: 64px; padding: 7px;
   background: #FFFFFF; border-radius: 14px; object-fit: contain;
 }
+/* タップで演出を再生できるロゴ（app.js の setupLogoReplay） */
+.site-logo.logo-replay { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.site-logo.logo-replay:focus-visible { outline: 2px solid var(--accent-on-dark); outline-offset: 3px; }
+.site-logo.logo-replay:active { transform: scale(0.96); }
 .site-head-text { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .site-brand { margin: 0; display: flex; align-items: center; gap: 9px; color: var(--on-dark); font-size: 12px; }
 .brand-mark { flex: none; width: 7px; height: 7px; background: var(--accent-on-dark); }
