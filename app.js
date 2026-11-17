@@ -955,8 +955,40 @@ export async function init() {
   }
 }
 
+// ヘッダーのKWNロゴをタップ（クリック / Enter・Space）すると、ロゴの組み上がり演出をもう一度流す。
+// 起動演出の最中（html.is-booting）と、演出の再生中は受け付けない。動きを減らす設定のときは何もしない。
+function setupLogoReplay() {
+  const logo = document.querySelector('.site-header .site-logo');
+  if (!logo) return;
+  logo.classList.add('logo-replay');
+  logo.setAttribute('role', 'button');
+  logo.setAttribute('tabindex', '0');
+  logo.setAttribute('aria-label', 'KWNロゴのアニメーションを再生');
+  let playing = false;
+  const replay = async () => {
+    if (playing || wantsReducedMotion()) return;
+    if (document.documentElement.classList.contains('is-booting')) return;
+    playing = true;
+    try {
+      await playLogoIntro({ target: logo });
+    } catch (e) {
+      /* 演出が失敗しても、ロゴは元のまま使える */
+    } finally {
+      playing = false;
+    }
+  };
+  logo.addEventListener('click', replay);
+  logo.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      replay();
+    }
+  });
+}
+
 if (typeof document !== 'undefined') {
   setupA2hs();
   initToday(); // 一番上の「今日の学校の予定」。失敗しても帯が出ないだけで、他には影響しない
   init();
+  setupLogoReplay();
 }
