@@ -992,31 +992,9 @@ function setupLogoReplay() {
   });
 }
 
-// ツールのカード・リンクをタップしたとき、ロゴ演出を流してから開く（新しいタブで開く動きは変えない）。
-// 同じタブでの移動は起こさない。ポップアップが止められたときは、ふつうのリンクの動きに任せる。
-function setupLogoOnNavigate() {
-  document.addEventListener('click', (e) => {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    const a = e.target.closest ? e.target.closest('#grid a.card[href], #links a.card[href]') : null;
-    if (!a || !canPlayLogo()) return;
-    const url = a.href;
-    // クリックの流れの中で開く（あとで開くと、ブラウザにポップアップとして止められやすい）
-    // noopener を付けると戻り値が null になるため、開いてから opener を外す
-    const w = window.open('about:blank', '_blank');
-    if (!w) return; // 止められたら、ふつうのリンクとして開く
-    try { w.opener = null; } catch (err) { /* 外せなくても続ける */ }
-    try { window.focus(); } catch (err) { /* 戻せないブラウザでは、新しいタブで演出の続きを見る */ }
-    e.preventDefault();
-    playLogoAnimation().then(() => {
-      try { w.location.href = url; } catch (err) { w.close(); window.location.href = url; }
-    });
-  });
-}
-
 if (typeof document !== 'undefined') {
   setupA2hs();
   initToday(); // 一番上の「今日の学校の予定」。失敗しても帯が出ないだけで、他には影響しない
   init();
   setupLogoReplay();
-  setupLogoOnNavigate();
 }
