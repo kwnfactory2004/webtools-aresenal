@@ -957,6 +957,25 @@ export async function init() {
 
 // ヘッダーのKWNロゴをタップ（クリック / Enter・Space）すると、ロゴの組み上がり演出をもう一度流す。
 // 起動演出の最中（html.is-booting）と、演出の再生中は受け付けない。動きを減らす設定のときは何もしない。
+// ロゴ演出を1回流す。流せないとき（動きを減らす設定・起動演出の最中・再生中）は false
+let logoPlaying = false;
+function canPlayLogo() {
+  if (logoPlaying || wantsReducedMotion()) return false;
+  return !document.documentElement.classList.contains('is-booting');
+}
+async function playLogoAnimation() {
+  const logo = document.querySelector('.site-header .site-logo');
+  if (!logo || !canPlayLogo()) return;
+  logoPlaying = true;
+  try {
+    await playLogoIntro({ target: logo });
+  } catch (e) {
+    /* 演出が失敗しても、ロゴは元のまま使える */
+  } finally {
+    logoPlaying = false;
+  }
+}
+
 function setupLogoReplay() {
   const logo = document.querySelector('.site-header .site-logo');
   if (!logo) return;
@@ -964,25 +983,33 @@ function setupLogoReplay() {
   logo.setAttribute('role', 'button');
   logo.setAttribute('tabindex', '0');
   logo.setAttribute('aria-label', 'KWNロゴのアニメーションを再生');
-  let playing = false;
-  const replay = async () => {
-    if (playing || wantsReducedMotion()) return;
-    if (document.documentElement.classList.contains('is-booting')) return;
-    playing = true;
-    try {
-      await playLogoIntro({ target: logo });
-    } catch (e) {
-      /* 演出が失敗しても、ロゴは元のまま使える */
-    } finally {
-      playing = false;
-    }
-  };
-  logo.addEventListener('click', replay);
+  logo.addEventListener('click', () => { playLogoAnimation(); });
   logo.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      replay();
+      playLogoAnimation();
     }
+  });
+}
+
+// ツールのカード・リンクをタップしたとき、ロゴ演出を流してから開く（新しいタブで開く動きは変えない）。
+// 同じタブでの移動は起こさない。ポップアップが止められたときは、ふつうのリンクの動きに任せる。
+function setupLogoOnNavigate() {
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest ? e.target.closest('#grid a.card[href], #links a.card[href]') : null;
+    if (!a || !canPlayLogo()) return;
+    const url = a.href;
+    // クリックの流れの中で開く（あとで開くと、ブラウザにポップアップとして止められやすい）
+    // noopener を付けると戻り値が null になるため、開いてから opener を外す
+    const w = window.open('about:blank', '_blank');
+    if (!w) return; // 止められたら、ふつうのリンクとして開く
+    try { w.opener = null; } catch (err) { /* 外せなくても続ける */ }
+    try { window.focus(); } catch (err) { /* 戻せないブラウザでは、新しいタブで演出の続きを見る */ }
+    e.preventDefault();
+    playLogoAnimation().then(() => {
+      try { w.location.href = url; } catch (err) { w.close(); window.location.href = url; }
+    });
   });
 }
 
@@ -991,4 +1018,5 @@ if (typeof document !== 'undefined') {
   initToday(); // 一番上の「今日の学校の予定」。失敗しても帯が出ないだけで、他には影響しない
   init();
   setupLogoReplay();
+  setupLogoOnNavigate();
 }
