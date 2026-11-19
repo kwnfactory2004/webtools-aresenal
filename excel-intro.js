@@ -2,17 +2,17 @@
 // 作った瞬間に「本物の部品」が現れる（本物のカードが、薄い色の四角と入れ替わる）。ページ本体の見た目や並びは触らない。
 // ページは下へスクロールしながら、見えていない部品も上から順に作る。最後は一番上へ戻る。
 const AGENTS = [
-  { color: '#0F382C', label: 'AGENT 1', f: 0.7 },
-  { color: '#1F9D6B', label: 'AGENT 2', f: 0.7 },
-  { color: '#2F6FDE', label: 'AGENT 3', f: 0.7 },
-  { color: '#E0702B', label: 'AGENT 4', f: 0.7 },
-  { color: '#8B4FD0', label: 'AGENT 5', f: 0.7 },
-  { color: '#D6336C', label: 'AGENT 6', f: 0.7 },
+  { color: '#0F382C', label: 'AGENT 1', f: 0.6 },
+  { color: '#1F9D6B', label: 'AGENT 2', f: 0.6 },
+  { color: '#2F6FDE', label: 'AGENT 3', f: 0.6 },
+  { color: '#E0702B', label: 'AGENT 4', f: 0.6 },
+  { color: '#8B4FD0', label: 'AGENT 5', f: 0.6 },
+  { color: '#D6336C', label: 'AGENT 6', f: 0.6 },
 ];
 const CW = 120, CH = 32;
 const SX = 0, SY = 0;     // ページはずらさない（方眼・数式バーは上に重ねるだけ）
-const TYPE_MS = 360;      // セルに名前を打つ時間（ミリ秒）。カード・ラベルで共通
-const STEP_MS = 500;      // 上から順に、部品を作り始める間隔
+const TYPE_MS = 300;      // セルに名前を打つ時間（ミリ秒）。カード・ラベルで共通
+const STEP_MS = 380;      // 上から順に、部品を作り始める間隔
 const SCROLL_TAU_MS = 260; // スクロールが目標へ追いつく早さ（小さいほど速い）
 
 const letters = (n) => {
@@ -245,7 +245,11 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan,
     scrollTimer = setInterval(tick, 16);
     // 最初に差し込む演出（ロゴ起動演出など）。終わるまで AI カーソルは動かない。失敗しても本編は続ける
     if (before) { try { await before({ isSkipped: () => skipped }); } catch (e) { /* 次へ */ } }
-    await sleep(350);
+    await sleep(150);
+    // ロゴとのつながり: AIカーソルは、着地したロゴの中心から飛び出し、最後はロゴへ戻って吸い込まれる
+    const lg = document.querySelector('.site-logo');
+    const lr = lg ? lg.getBoundingClientRect() : null;
+    const [lgX, lgY] = lr ? [lr.left + lr.width / 2 - SX, lr.top + lr.height / 2 - SY] : edgeDoc(0, 0);
 
     // 上の部品から順に、0.5秒おきに作り始める（ヘッダー・今日の帯・カードが1枠ずつ。ラベルは次の部品と同時）。
     // 手の空いているAIが担当する。作り始めた部品が画面の下に隠れないよう、ページを下へスクロールしていく。
@@ -264,6 +268,13 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan,
       const need = job.rect.y + job.rect.h + SY + 40 - innerHeight;
       target = Math.max(target, Math.min(maxScroll, need));
       const wk = await acquire();
+      if (!wk.out) {                       // 初めて動くとき: ロゴの中心から小さく出てくる
+        wk.out = true;
+        wk.cur.classList.add('sink');
+        moveCursor(wk, lgX, lgY, 0);
+        void wk.cur.offsetWidth;
+        wk.cur.classList.remove('sink');
+      }
       wk.cur.classList.remove('hide');
       running.push((async () => {
         try {
@@ -282,12 +293,12 @@ export async function runExcelIntro({ revealCard, revealNow, setBooting, onPlan,
 
     // 仕上げ: 一番上へスクロールで戻りながらカーソルが去る → 方眼と数式バーがすっと消える
     target = 0;
-    agents.forEach((wk, idx) => { const [x, y] = edgeDoc(idx, 0); moveCursor(wk, x, y, 0.9); });
-    await sleep(1300);
-    agents.forEach((wk) => wk.cur.classList.add('hide'));
+    agents.forEach((wk) => moveCursor(wk, lgX, lgY, 0.7));   // ロゴへ戻る
+    await sleep(800);
+    agents.forEach((wk) => wk.cur.classList.add('sink', 'hide'));
     fbar.textContent = ''; namebox.textContent = '';
     xl.classList.add('xl-fade'); lines.classList.add('xl-fade');
-    await sleep(700);
+    await sleep(500);
     sy = 0; target = 0; applyScroll();
     root.classList.remove('xl-on');
     setBooting(false);                    // 今日の予定の帯が、ここで登場する
