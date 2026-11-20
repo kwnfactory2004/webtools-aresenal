@@ -140,6 +140,21 @@ export function buildToday(data, now) {
   };
 }
 
+// 天気（Open-Meteo・無料・キー不要）。学校＝群馬自動車大学校（伊勢崎）
+export const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=36.31&longitude=139.2&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=2';
+export function wxText(c) {
+  if (typeof c !== 'number') return '-'; if (c === 85 || c === 86) return '雪';
+  if (c === 0) return '快晴'; if (c <= 3) return '晴れ〜くもり'; if (c <= 48) return '霧・くもり';
+  if (c <= 57) return '霧雨'; if (c <= 67) return '雨'; if (c <= 77) return '雪'; if (c <= 82) return 'にわか雨'; return '雷雨';
+}
+// Open-Meteo の返事 → 「今日：晴れ 5〜15℃ 雨10% ／ 明日：…」。形がおかしければ ''
+export function formatWeather(j) {
+  const d = j && j.daily;
+  if (!d || !Array.isArray(d.time) || d.time.length < 2) return '';
+  const t = (v) => (typeof v === 'number' ? Math.round(v) : '-');
+  return ['今日', '明日'].map((lb, i) => `${lb}：${wxText(d.weather_code?.[i])} ${t(d.temperature_2m_min?.[i])}〜${t(d.temperature_2m_max?.[i])}℃ 雨${d.precipitation_probability_max?.[i] ?? '-'}%`).join(' ／ ');
+}
+
 export const fmtTime = (min) => `${Math.floor(min / 60)}:${pad2(min % 60)}`;
 const periodLabel = (r) => (r.from === r.to ? String(r.from) : `${r.from}-${r.to}`);
 
@@ -181,7 +196,7 @@ function renderTripRow(row, nowMin) {
 }
 
 // 帯の中身（HTML文字列）
-export function renderToday(vm) {
+export function renderToday(vm, weather = '') {
   const d = vm.date;
   const head = `<div class="today-head">
     <p class="today-label">${dotText('TODAY', { className: 'dot-today' })}<span class="today-date">${dotText(`${d.getMonth() + 1}/${d.getDate()} ${WEEK_EN[d.getDay()]}`, { className: 'dot-date' })}<span class="today-dow-ja">（${WEEK_JA[d.getDay()]}）</span></span></p>
@@ -203,6 +218,7 @@ export function renderToday(vm) {
   } else {
     body = `<p class="today-off is-${vm.status.kind}">${escapeHtml(vm.status.label)}<span>今日は授業がありません</span></p>`;
   }
+  if (weather) body += `<p class="today-weather">${dotText('WEATHER', { className: 'dot-weather' })}<span>${escapeHtml(weather)}</span></p>`;
   const tm = vm.tomorrow;
   const foot = `<p class="today-tomorrow">${dotText('TOMORROW', { className: 'dot-tomorrow' })}<span>${escapeHtml(tm.text)}</span></p>`;
   return head + body + foot;
@@ -238,9 +254,23 @@ export async function initToday(doc = document, fetchImpl = fetch, nowFn = () =>
     const guard = setTimeout(() => el.classList.remove('is-intro'), 20000);
     if (guard && guard.unref) guard.unref(); // node のテストが終わるのを待たせない
   }
+  // 天気は「その日の分」を1回だけ読む。0時を過ぎたら取り直す。失敗したら5分は取り直さない（帯はそのまま）
+  let weather = '', wxDay = '', wxBusy = false, wxFailAt = 0;
+  const loadWeather = (day) => {
+    if (wxBusy || (wxDay !== day && Date.now() - wxFailAt < 300000)) return;
+    wxBusy = true;
+    Promise.resolve().then(() => fetchImpl(WEATHER_URL)).then((r) => r.json()).then((j) => {
+      const text = formatWeather(j);
+      if (!text || j.daily.time[0] !== day) throw new Error('weather');
+      weather = text; wxDay = day; wxBusy = false; draw();
+    }).catch(() => { wxBusy = false; wxFailAt = Date.now(); });
+  };
   const draw = () => {
     try {
-      el.innerHTML = renderToday(buildToday(data, nowFn()));
+      const now = nowFn();
+      const day = dateKey(now);
+      if (wxDay !== day) { weather = ''; loadWeather(day); }
+      el.innerHTML = renderToday(buildToday(data, now), weather);
       el.hidden = false;
     } catch (e) {
       el.hidden = true;
