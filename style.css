@@ -341,9 +341,9 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .today-bar i.f { background: #FFFFFF; }
 .today-off { margin: 0; padding: 14px 4px; font-size: 17px; font-weight: 600; color: var(--ink); }
 .today-off span { display: block; margin-top: 3px; font-size: 13px; font-weight: 400; color: var(--muted); }
-.today-done, .today-items, .today-tomorrow { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
-.today-items, .today-tomorrow { display: flex; gap: 12px; align-items: baseline; }
-.today-items svg.dot, .today-tomorrow svg.dot { height: 9px; align-self: center; flex: none; color: var(--ink); }
+.today-done, .today-items, .today-weather, .today-tomorrow { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.today-items, .today-weather, .today-tomorrow { display: flex; gap: 12px; align-items: baseline; }
+.today-items svg.dot, .today-weather svg.dot, .today-tomorrow svg.dot { height: 9px; align-self: center; flex: none; color: var(--ink); }
 .today-tomorrow { padding-top: 10px; border-top: 1px dashed var(--line); }
 @media (max-width: 520px) {
   .today { padding: 16px 16px 14px; }
@@ -370,7 +370,7 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .today-bar i:nth-child(4) { --k: 3; } .today-bar i:nth-child(5) { --k: 4; } .today-bar i:nth-child(6) { --k: 5; }
 .today-bar i:nth-child(7) { --k: 6; } .today-bar i:nth-child(8) { --k: 7; } .today-bar i:nth-child(9) { --k: 8; }
 .today-bar i:nth-child(10) { --k: 9; }
-.today.is-intro .today-off, .today.is-intro .today-done, .today.is-intro .today-items { animation: today-fade .5s ease-out .6s both; }
+.today.is-intro .today-off, .today.is-intro .today-done, .today.is-intro .today-items, .today.is-intro .today-weather { animation: today-fade .5s ease-out .6s both; }
 .today.is-intro .today-tomorrow { animation: today-fade .5s ease-out 1.3s both; }
 .is-booting .today.is-intro, .is-booting .today.is-intro * { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .today.is-intro, .today.is-intro * { animation: none !important; } }
