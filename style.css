@@ -379,3 +379,22 @@ a.card:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .is-touring .today { opacity: 0; }
 .is-touring .today.is-intro, .is-touring .today.is-intro * { animation: none !important; }
 .today-trip { font-weight: 700; font-size: 14px; margin: 0 0 8px; color: var(--c, #0F382C); }
+
+/* 検索とタグ絞り込み（filter.js）。起動演出が終わってから出る */
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 0 0 20px; }
+.filter-bar[hidden], .group[hidden], .card[hidden] { display: none !important; }
+#tool-search {
+  flex: 1 1 240px; min-width: 0; min-height: 44px; padding: 10px 16px;
+  font-family: var(--sans); font-size: 14px; color: var(--text);
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+}
+#tool-search:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter-chip {
+  font-family: var(--sans); font-size: 13px; min-height: 36px; padding: 6px 14px;
+  color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+}
+.filter-chip:hover { border-color: var(--glow-hover); }
+.filter-chip.on { color: #FFFFFF; background: var(--ink); border-color: var(--ink); }
+.filter-chip:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.filter-note { flex-basis: 100%; margin: 0; min-height: 1.4em; font-size: 13px; color: var(--muted); }
